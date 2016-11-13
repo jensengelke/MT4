@@ -33,6 +33,9 @@ double lots(double baseLots, double accountSize) {
    if(equityTimes >= 1) {
          lots = baseLots*equityTimes;                 // total new open Lots
    }         
+   if (lots > MarketInfo(Symbol(), MODE_MAXLOT)) {
+      lots = MarketInfo(Symbol(), MODE_MAXLOT);
+   }
    return lots;
 }
 
@@ -78,4 +81,16 @@ int countOpenPositions(int myMagic) {
       }
    }
    return openPositons;
+}
+
+void closeAllOpenOrders(int myMagic) {
+ for (int i=OrdersTotal();i>=0;i--) {
+      OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
+      if (OrderMagicNumber() != myMagic) continue;
+      if (OrderSymbol() != Symbol()) continue;
+      if (OrderType() == OP_BUY ||
+         OrderType() == OP_SELL) {
+         OrderClose(OrderTicket(),OrderLots(),Bid,2,clrWhite);
+      }
+   }
 }

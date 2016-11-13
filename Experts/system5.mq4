@@ -22,6 +22,8 @@ extern double buffer = 5.0;
 extern int orderExpiryInMin = 3600;
 static datetime lastTradeTime = NULL;
 extern int maxPositions = 5;
+extern int initialStopAtXCandleExtreme = 5;
+extern int trailWithXCandleExtreme = 5;
 
 string screenString = "StatusWindow";
 string screenHighLine = "highLine";
@@ -33,7 +35,13 @@ string screenLowLine = "lowLine";
 int OnInit()
   {
 //---
-   
+   if ( (fixedTakeProfit==0.0 && trailInProfit==0.0 && trailWithXCandleExtreme==0) ||
+      (trailInProfit!=0 && trailWithXCandleExtreme !=0) ||
+      (initialStop!=0 && initialStopAtXCandleExtreme!=0) ||
+      (initialStop==0 && initialStopAtXCandleExtreme==0) ||
+      (orderExpiryInMin < 900) ) {
+      return (INIT_FAILED);
+   }
 //---
    return(INIT_SUCCEEDED);
   }
@@ -55,13 +63,13 @@ void OnTick()
    } else {
       lastTradeTime = Time[0];
    }
-   
+  
    double lowestLow = Low[iLowest(NULL,PERIOD_CURRENT,MODE_LOW,extremeCandles,0)];
    double highestHigh = High[iHighest(NULL,PERIOD_CURRENT,MODE_HIGH,extremeCandles,0)];
    int openPos = countOpenPositions(myMagic);
    int openPendingPos = countOpenPendingOrders(myMagic);
    double risk = currentRisk(myMagic);
-   string status = StringFormat("currentRisk=%.2f, highest high=%.2f, lowest low=%.2f", risk,highestHigh,lowestLow);   
+   string status = StringFormat("spread=%.5f, currentRisk=%.2f, highest high=%.2f, lowest low=%.2f",(Bid-Ask),risk,highestHigh,lowestLow);   
       
    ObjectDelete(screenString);
    ObjectCreate(screenString, OBJ_LABEL, 0, 0, 0);
@@ -81,6 +89,7 @@ void OnTick()
       TimeHour(TimeLocal())>22 ||
       ( TimeHour(TimeLocal())>21 &&  TimeMinute(TimeLocal())>58)) {
          closeAllPendingOrders(myMagic);
+         closeAllOpenOrders(myMagic);
       return;
    }
    
@@ -92,31 +101,51 @@ void OnTick()
          )) {
       //open new positions?
       if ((High[1] == highestHigh) || (High[0] == highestHigh)) {
-         openLongPosition(lots(baseLots, accountSize),highestHigh + buffer, initialStop , fixedTakeProfit);
+          double stop = 0;
+          if (initialStop > 0) {
+            stop = initialStop;
+          } else if (initialStopAtXCandleExtreme>0) {
+            stop = highestHigh + buffer - Low[iLowest(NULL,PERIOD_CURRENT,MODE_LOW,initialStopAtXCandleExtreme,0)];
+          }
+         openLongPosition(lots(baseLots, accountSize),highestHigh + buffer, stop , fixedTakeProfit);
       }   
       if (Low[1] <= lowestLow || Low[0] <= lowestLow) {
-         openShortPosition(lots(baseLots, accountSize),lowestLow - buffer, initialStop, fixedTakeProfit);
+         double stop = initialStop;
+         if (initialStop > 0) {
+            stop = initialStop;
+          } else if (initialStopAtXCandleExtreme>0) {
+            stop = (High[iHighest(NULL,PERIOD_CURRENT,MODE_HIGH,initialStopAtXCandleExtreme,0)] - lowestLow - buffer);
+          }
+          openShortPosition(lots(baseLots, accountSize),lowestLow - buffer, stop, fixedTakeProfit);
       }
    }
    
-   if (trailInProfit > 0) {
+   double spread=Bid-Ask;
+   if (trailInProfit > 0 || trailWithXCandleExtreme>0) {
       RefreshRates();
-      double stopForLong = Bid - trailInProfit;
-      double stopForShort = Ask + trailInProfit;
-     
+      double stopForLong,stopForShort;
+      
+      if (trailInProfit > 0) {
+         stopForLong = Bid - trailInProfit;
+         stopForShort = Ask + trailInProfit;
+      } else {
+         stopForLong = Low[iLowest(NULL,PERIOD_CURRENT,MODE_LOW,trailWithXCandleExtreme,0)];
+         stopForShort = High[iHighest(NULL,PERIOD_CURRENT,MODE_HIGH,initialStopAtXCandleExtreme,0)];
+      }
+      
       for (int i=OrdersTotal();i>=0;i--) {
          OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
          if (OrderMagicNumber() != myMagic) {continue;}
          if (OrderSymbol() != Symbol()) {continue;}
          if (OrderProfit() > 0) {
             if (OrderType() == OP_BUY && stopForLong > 0) {
-               if (OrderStopLoss() < stopForLong) {
+               if (OrderStopLoss() < stopForLong && OrderOpenPrice()<stopForLong) {
                  OrderModify(OrderTicket(),0,stopForLong,OrderTakeProfit(),0,clrGreen);
                }
                continue;
             } 
             if (OrderType() == OP_SELL && stopForShort > 0) {
-               if (OrderStopLoss() > stopForShort) {
+               if (OrderStopLoss() > stopForShort && OrderOpenPrice()>stopForShort) {
                   OrderModify(OrderTicket(),0,stopForShort,OrderTakeProfit(),0,clrRed);
                }
             }
@@ -130,6 +159,7 @@ void OnTick()
 
 
 void openLongPosition(double lots, double price, double stopLoss, double takeProfit) {
+   RefreshRates();
    double stop = 0;
    double tp = 0;
    
@@ -160,6 +190,7 @@ void openLongPosition(double lots, double price, double stopLoss, double takePro
 }
 
 void openShortPosition(double lots, double price, double stopLoss, double takeProfit) {
+   RefreshRates();
    double stop = 0;
    double tp = 0;
    
