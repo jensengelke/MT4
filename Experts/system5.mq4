@@ -120,7 +120,6 @@ void OnTick()
       }
    }
    
-   double spread=Bid-Ask;
    if (trailInProfit > 0 || trailWithXCandleExtreme>0) {
       RefreshRates();
       double stopForLong,stopForShort;
@@ -130,8 +129,16 @@ void OnTick()
          stopForShort = Ask + trailInProfit;
       } else {
          stopForLong = Low[iLowest(NULL,PERIOD_CURRENT,MODE_LOW,trailWithXCandleExtreme,0)];
-         stopForShort = High[iHighest(NULL,PERIOD_CURRENT,MODE_HIGH,initialStopAtXCandleExtreme,0)];
+         if (stopForLong > Bid) {
+            stopForLong = 0;
+         }
+         stopForShort = High[iHighest(NULL,PERIOD_CURRENT,MODE_HIGH,trailWithXCandleExtreme,0)];
+         if (stopForShort < Ask) {
+            stopForShort = 0;
+         }
       }
+      //PrintFormat("stopForLong=%.2f, stopForShort=%.2f",stopForLong,stopForShort);
+      double minStopLevel = MarketInfo(NULL,MODE_STOPLEVEL);
       
       for (int i=OrdersTotal();i>=0;i--) {
          OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
@@ -140,13 +147,17 @@ void OnTick()
          if (OrderProfit() > 0) {
             if (OrderType() == OP_BUY && stopForLong > 0) {
                if (OrderStopLoss() < stopForLong && OrderOpenPrice()<stopForLong) {
-                 OrderModify(OrderTicket(),0,stopForLong,OrderTakeProfit(),0,clrGreen);
+                 if (!OrderModify(OrderTicket(),0,stopForLong,OrderTakeProfit(),0,clrGreen)) {
+                  PrintFormat("adapt stopForLong=%.2f, Bid=%.2f, minStopLevel=%.2f, last error:%i ",stopForLong, Bid, minStopLevel, GetLastError());   
+                 }
                }
                continue;
             } 
             if (OrderType() == OP_SELL && stopForShort > 0) {
                if (OrderStopLoss() > stopForShort && OrderOpenPrice()>stopForShort) {
-                  OrderModify(OrderTicket(),0,stopForShort,OrderTakeProfit(),0,clrRed);
+                  if (!OrderModify(OrderTicket(),0,stopForShort,OrderTakeProfit(),0,clrRed)){
+                     PrintFormat("adapt stopForShort=%.2f, Ask=%.2f, minStopLevel=%.2f, last error:%i ",stopForShort, Ask,minStopLevel, GetLastError());                     
+                 }
                }
             }
          }
@@ -170,7 +181,13 @@ void openLongPosition(double lots, double price, double stopLoss, double takePro
       if (takeProfit != 0) {
          tp = Ask +  takeProfit;
       }
-      OrderSend(NULL,OP_BUY,lots,Ask,2.0,stop,tp,NULL,myMagic,0,clrGreen);        
+      //PrintFormat("buy: Ask=%.2f,stop=%.2f,tp=%.2f",Ask,stop,tp);
+      int ticket = OrderSend(NULL,OP_BUY,lots,Ask,2.0,stop,tp,NULL,myMagic,0,clrGreen);      
+       if (-1 == ticket) {
+            Print("OrderBuy last error: " + GetLastError());   
+         } else {
+            //Print("ticket:" + ticket);
+         }  
    } else {
       if (stopLoss != 0) {
          stop = price - stopLoss;
@@ -179,11 +196,12 @@ void openLongPosition(double lots, double price, double stopLoss, double takePro
          tp = price +  takeProfit;
       }
       if (!pendingOrderAt(OP_BUYSTOP, price)) {
+         //PrintFormat("buystop: Ask=%.2f,price=%.2f, stop=%.2f,tp=%.2f",Ask,price,stop,tp);
          int ticket = OrderSend(NULL,OP_BUYSTOP,lots,price,5,stop,tp,NULL,myMagic,TimeCurrent()+(orderExpiryInMin),clrGreen);     
          if (-1 == ticket) {
-            Print("last error: " + GetLastError());   
+            Print("buystop last error: " + GetLastError());   
          } else {
-            Print("ticket:" + ticket);
+           // Print("ticket:" + ticket);
          }
       }
    }
@@ -201,7 +219,13 @@ void openShortPosition(double lots, double price, double stopLoss, double takePr
       if (takeProfit != 0) {
          tp = Bid - takeProfit;
       }
-      OrderSend(NULL,OP_SELL,lots,Bid,2.0,stop,tp,NULL,myMagic,0,clrGreen);        
+      //PrintFormat("Sell: Bid=%.2f,stop=%.2f,tp=%.2f",Bid,stop,tp);
+      int ticket = OrderSend(NULL,OP_SELL,lots,Bid,2.0,stop,tp,NULL,myMagic,0,clrGreen);      
+      if (-1 == ticket) {
+            Print("sell last error: " + GetLastError());   
+         } else {
+           // Print("ticket:" + ticket);
+         }  
    } else {
       if (stopLoss != 0) {
          stop = price + stopLoss;
@@ -210,7 +234,13 @@ void openShortPosition(double lots, double price, double stopLoss, double takePr
          tp = price - takeProfit;
       }
       if (!pendingOrderAt(OP_SELLSTOP, price)) {
-         OrderSend(NULL,OP_SELLSTOP,lots,price,2,stop,tp,NULL,myMagic,TimeCurrent()+(orderExpiryInMin),clrRed);
+         //PrintFormat("SellStop: Bid=%.2f,price=%.2f, stop=%.2f,tp=%.2f",Bid,price, stop,tp);
+         int ticket = OrderSend(NULL,OP_SELLSTOP,lots,price,2,stop,tp,NULL,myMagic,TimeCurrent()+(orderExpiryInMin),clrRed);
+          if (-1 == ticket) {
+            Print("sellstop last error: " + GetLastError());   
+         } else {
+            //Print("ticket:" + ticket);
+         }
       }
    }
    

@@ -84,13 +84,17 @@ int countOpenPositions(int myMagic) {
 }
 
 void closeAllOpenOrders(int myMagic) {
+ RefreshRates();
  for (int i=OrdersTotal();i>=0;i--) {
       OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
       if (OrderMagicNumber() != myMagic) continue;
       if (OrderSymbol() != Symbol()) continue;
-      if (OrderType() == OP_BUY ||
-         OrderType() == OP_SELL) {
+      if (OrderType() == OP_BUY) {
          OrderClose(OrderTicket(),OrderLots(),Bid,2,clrWhite);
+      }
+      
+      if (OrderType() == OP_SELL) {
+         OrderClose(OrderTicket(),OrderLots(),Ask,2,clrWhite);
       }
    }
 }
