@@ -83,6 +83,20 @@ int countOpenPositions(int myMagic) {
    return openPositons;
 }
 
+int countOpenPositions(int myMagic, int mode) {
+   int openPositons = 0;
+   for (int i=OrdersTotal();i>=0;i--) {
+      OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
+      if (OrderMagicNumber() != myMagic) continue;
+      if (OrderSymbol() != Symbol()) continue;
+      if (OrderType() == mode) {
+         openPositons++;
+      }
+   }
+   return openPositons;
+}
+
+
 void closeAllOpenOrders(int myMagic) {
  RefreshRates();
  for (int i=OrdersTotal();i>=0;i--) {

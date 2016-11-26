@@ -22,9 +22,7 @@ extern double initialStop = 0.0;
 extern double trailInProfit = 10.0;
 extern double buffer = 5.0;
 extern int orderExpiryInMin = 900;
-extern int maxPositions = 5;
-extern int trailWithXCandleExtreme = 5;
-extern double minCandleSize = 10.0;
+extern double stopAufEinstandBei = 5.0;
 
 int longTicket = 0;
 int shortTicket = 0;
@@ -38,7 +36,7 @@ string screenString = "StatusWindow";
 int OnInit()
   {
 //---
-   if ( (initialStop==0.0 && trailInProfit==0.0 && trailWithXCandleExtreme==0) ||
+   if ( (initialStop==0.0 && trailInProfit==0.0) ||
        (orderExpiryInMin < 900) ) {
       return (INIT_FAILED);
    }
@@ -66,8 +64,8 @@ void OnTick()
       TimeHour(TimeLocal())<startHour || 
       TimeHour(TimeLocal())> endHour ||
       ( TimeHour(TimeLocal())== endHour &&  TimeMinute(TimeLocal())>=endMinute)) {
-         //closeAllPendingOrders(myMagic);
-         //closeAllOpenOrders(myMagic);
+         closeAllPendingOrders(myMagic);
+         closeAllOpenOrders(myMagic);
       return;
    }
    
@@ -77,9 +75,11 @@ void OnTick()
    }
    
    // trail order open limit and stop loss
-   if (0<OrdersTotal()) {
+   if (0<OrdersTotal() && (trailInProfit>0 || stopAufEinstandBei>0)) {
+   
       double stopForShort = Bid + trailInProfit;
       double stopForLong = Ask - trailInProfit;
+      double spread = Ask - Bid;
       
       for (int i=OrdersTotal(); i>=0;i--){
          OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
@@ -89,10 +89,16 @@ void OnTick()
          if (OrderType()==OP_BUY) {
             //PrintFormat("BuyOrder is open, closing Sell Order: %i", shortTicket);
             closeOrder(shortTicket);
-            if (OrderStopLoss()<stopForLong) {
+            if (trailInProfit>0 && OrderStopLoss()<stopForLong && OrderOpenPrice()<stopForLong) {
                PrintFormat("trailing long order: Bid=%.2f,Ask=%.2f,stopForLong=%.2f",Bid,Ask,stopForLong);
                if (!OrderModify(OrderTicket(),0,stopForLong,OrderTakeProfit(),0,clrGreen)){
                         PrintFormat("last error:%i ",GetLastError());                     
+               }
+            } else if (stopAufEinstandBei>0 && (OrderOpenPrice() + stopAufEinstandBei) <= Bid && (OrderStopLoss() <(OrderOpenPrice() + spread) )) {
+               
+               PrintFormat("Stop auf Einstand: OrderOpenPrice=%.2f, spread = %.2f, stop=%.2f, Bid=%.2f",OrderOpenPrice(),spread, (OrderOpenPrice()+spread),Bid);
+               if (!OrderModify(OrderTicket(),0,(OrderOpenPrice() + spread),OrderTakeProfit(),0,clrGreen)){
+                       PrintFormat("last error:%i ",GetLastError());                     
                }
             }
          }
@@ -100,10 +106,16 @@ void OnTick()
          if (OrderType()==OP_SELL) {
             //PrintFormat("BuyOrder is open, closing Sell Order: %i", longTicket);
             closeOrder(longTicket);
-            if (OrderStopLoss()>stopForShort) {
+            if (trailInProfit>0 && OrderStopLoss()>stopForShort && OrderOpenPrice()>stopForShort) {
                PrintFormat("trailing short order: Bid=%.2f,Ask=%.2f,stopForShort=%.2f",Bid,Ask,stopForShort);
                if (!OrderModify(OrderTicket(),0,stopForShort,OrderTakeProfit(),0,clrGreen)){
                         PrintFormat("last error:%i ",GetLastError());                     
+               }
+            }  else if (stopAufEinstandBei>0 && (OrderOpenPrice() - stopAufEinstandBei) >= Ask && (OrderStopLoss() > (OrderOpenPrice() - spread) )) {
+               
+               PrintFormat("Stop auf Einstand: OrderOpenPrice=%.2f, spread = %.2f, stop=%.2f, Ask=%.2f",OrderOpenPrice(),spread, (OrderOpenPrice()-spread),Ask);
+               if (!OrderModify(OrderTicket(),0,(OrderOpenPrice() - spread),OrderTakeProfit(),0,clrGreen)){
+                       PrintFormat("last error:%i ",GetLastError());                     
                }
             }
          }
