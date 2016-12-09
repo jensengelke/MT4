@@ -39,6 +39,15 @@ double lots(double baseLots, double accountSize) {
    return lots;
 }
 
+double lotsByRisk(double points, double riskSize, int lotDigits) {
+   double risk = riskSize * AccountEquity();
+   double tickValue = MarketInfo(Symbol(),MODE_TICKVALUE);
+   double tickSize =  MarketInfo(Symbol(),MODE_TICKSIZE);
+   double lots = (risk * tickValue) / (points*tickSize);
+   lots = NormalizeDouble(lots,lotDigits);
+   return lots;   
+}
+
 void closeAllPendingOrders(int myMagic) {
  for (int i=OrdersTotal();i>=0;i--) {
       OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
@@ -111,4 +120,71 @@ void closeAllOpenOrders(int myMagic) {
          OrderClose(OrderTicket(),OrderLots(),Ask,2,clrWhite);
       }
    }
+}
+
+void closeLongPositions(int myMagic) {
+ RefreshRates();
+ for (int i=OrdersTotal();i>=0;i--) {
+      OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
+      if (OrderMagicNumber() != myMagic) continue;
+      if (OrderSymbol() != Symbol()) continue;
+      if (OrderType() == OP_BUY) {
+         OrderClose(OrderTicket(),OrderLots(),Bid,2,clrWhite);
+      }
+   }
+}
+
+void closeShortPositions(int myMagic) {
+ RefreshRates();
+ for (int i=OrdersTotal();i>=0;i--) {
+      OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
+      if (OrderMagicNumber() != myMagic) continue;
+      if (OrderSymbol() != Symbol()) continue;
+      if (OrderType() == OP_SELL) {
+         OrderClose(OrderTicket(),OrderLots(),Ask,2,clrWhite);
+      }
+   }
+}
+
+int currentDirectionOfOpenPositions(int myMagic) {
+   int direction = 0;
+   for (int i=OrdersTotal();i>=0;i--) {
+      OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
+      if (OrderMagicNumber() != myMagic) continue;
+      if (OrderSymbol() != Symbol()) continue;
+      if (OrderType() == OP_BUY) {
+         direction = direction + 1;
+      }
+      
+      if (OrderType() == OP_SELL) {
+         direction = direction - 1;
+      }
+   }
+   return direction;
+}
+
+bool isHandelszeit(string startTime, string endTime) {
+
+   if (DayOfWeek()<1 || DayOfWeek()>5) {
+      return false;
+   }
+   
+   string startTimeString = StringFormat("%4i.%02i.%02i %s",TimeYear(TimeLocal()),TimeMonth(TimeLocal()), TimeDay(TimeLocal()), startTime);
+   string endTimeString = StringFormat("%4i.%02i.%02i %s",TimeYear(TimeLocal()),TimeMonth(TimeLocal()), TimeDay(TimeLocal()), endTime);
+         
+   datetime startDt = StrToTime(startTimeString);
+   datetime endDt = StrToTime(endTimeString);
+   
+   if (TimeLocal() >= startDt && TimeLocal()<=endDt) {
+      return true;
+   }
+   return false;
+}
+
+bool isHandelszeit(int startHour, int startMinute, int endHour, int endMinute) {
+
+   string startTimeString = StringFormat("%2i:%2i", startHour,startMinute);
+   string endTimeString = StringFormat("%2i:%2i", endHour, endMinute);
+         
+   return isHandelszeit(startTimeString, endTimeString);
 }

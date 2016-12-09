@@ -24,6 +24,7 @@ extern double stop = 5.0;
 extern double tp = 2.0;
 extern double distance = 5.0;
 extern double maxOrders = 4;
+extern double stopAufEinstandBei = 10.0;
 
 datetime lastTradeTime = NULL;
 int longTicket = 0;
@@ -68,8 +69,35 @@ void OnTick()
       return;
    }
    
+   if (stopAufEinstandBei>0 && OrdersTotal()>0) {
+   
+      double spread = Ask - Bid;
+      
+      for (int i=OrdersTotal();i>=0;i--) {
+         OrderSelect(i,SELECT_BY_POS,MODE_TRADES);         
+         if (OrderMagicNumber() != myMagic) {continue;}
+         if (OrderSymbol() != Symbol()) {continue;}
+         if (OrderType()==OP_BUY) {
+            if ((OrderOpenPrice() + stopAufEinstandBei) <= Bid && (OrderStopLoss() <(OrderOpenPrice() + spread) )) {
+               if (!OrderModify(OrderTicket(),0,(OrderOpenPrice() + spread),OrderTakeProfit(),0,clrGreen)){
+                       PrintFormat("last error:%i ",GetLastError());                     
+               }
+            }
+         }
+         if (OrderType()==OP_SELL) {
+            if ((OrderOpenPrice() - stopAufEinstandBei) >= Ask && (OrderStopLoss() > (OrderOpenPrice() - spread) )) {
+               
+               PrintFormat("Stop auf Einstand: OrderOpenPrice=%.2f, spread = %.2f, stop=%.2f, Ask=%.2f",OrderOpenPrice(),spread, (OrderOpenPrice()-spread),Ask);
+               if (!OrderModify(OrderTicket(),0,(OrderOpenPrice() - spread),OrderTakeProfit(),0,clrGreen)){
+                       PrintFormat("last error:%i ",GetLastError());                     
+               }
+            }
+         }
+      }
+   }
+   
    if(lastTradeTime == Time[0]) {
-     // return;
+     return;
    } else {
       lastTradeTime = Time[0];
    }
@@ -89,25 +117,24 @@ void OnTick()
    ObjectSet(screenString, OBJPROP_XDISTANCE, 10);
    ObjectSet(screenString, OBJPROP_YDISTANCE, 10); 
    
-   ObjectCreate(screenRect, OBJ_RECTANGLE, 0,TimeCurrent()-60*rangePeriod,highestHigh,TimeCurrent(),lowestLow);
+   ObjectCreate(screenRect, OBJ_RECTANGLE, 0,TimeCurrent()-60*rangePeriod*Period(),highestHigh,TimeCurrent(),lowestLow);
    ObjectSet(screenRect, OBJPROP_BACK, true);
    ObjectSet(screenRect, OBJPROP_COLOR, clrBlue);
    ObjectSet(screenRect, OBJPROP_STYLE, STYLE_SOLID);
    
      
    if (OrdersTotal()<maxOrders && (highestHigh-lowestLow)<=range && minRange<(highestHigh-lowestLow)) {
-      if (countOpenPositions(myMagic,OP_BUY)<maxOrders/2 && Ask<(lowestLow+(highestHigh-lowestLow)/2)) {
+      if (countOpenPositions(myMagic,OP_BUY)<maxOrders/2 && Ask < lowestLow+(range/5)) {
          double stopLoss=Ask-spread-stop;
          if (stopLoss > lowestLow){ stop = lowestLow; }
          openLongPosition(lots(baseLots, accountSize), Ask, stopLoss, Ask+tp+spread) ;
       }
-      if (countOpenPositions(myMagic,OP_SELL)<maxOrders/2 && Bid>(lowestLow+(highestHigh-lowestLow)/2)) {
+      if (countOpenPositions(myMagic,OP_SELL)<maxOrders/2 && Bid > (highestHigh-range/5) ) {
          double stopLoss=Bid+spread+stop;
-         if (stopLoss < highestHigh){ stop = highestHigh; }
-         openShortPosition(lots(baseLots, accountSize), Bid, highestHigh, Bid-spread-tp) ;
+         if (stopLoss < highestHigh){ stopLoss = highestHigh; }
+         openShortPosition(lots(baseLots, accountSize), Bid, stopLoss, Bid-spread-tp) ;
       }
-   }
-   
+   }   
   }
 //+------------------------------------------------------------------+
 int openLongPosition(double lots, double price, double stopLoss, double takeProfit) {

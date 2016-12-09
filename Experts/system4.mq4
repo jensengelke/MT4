@@ -1,14 +1,17 @@
-//+------------------------------------------------------------------+
-//|                                                      system4.mq4 |
-//|                        Copyright 2016, MetaQuotes Software Corp. |
-//|                                             https://www.mql5.com |
-//+------------------------------------------------------------------+
-#property copyright "Copyright 2016, MetaQuotes Software Corp."
+//findet eine langweilige range und platziert stop buy/sell knapp hinter den 
+//range grenzen
+
+#property copyright "Ausbruch"
 #property link      "https://www.mql5.com"
 #property version   "1.00"
 #property strict
 
 #include "../Include/JensUtils.mqh";
+
+extern int startHour = 8;
+extern int startMinute = 0;
+extern int endHour = 21;
+extern int endMinute = 58;
 
 extern bool overNight = true;
 extern int myMagic = 20161020;
@@ -27,6 +30,7 @@ extern int maxOpenPositions = 5;
 string screenString = "StatusWindow";
 string screenHighLine = "highLine";
 string screenLowLine = "lowLine";
+string screenRect = "Range";
 
 double highestHighExecution = 0.0;
 double lowestLowExecution = 0.0;
@@ -36,7 +40,9 @@ double lowestLowExecution = 0.0;
 int OnInit()
   {
 //---
-      
+   if (trailInProfit==0 && fixedTakeProfit==0) {
+      return(INIT_FAILED);
+   }
 //---
    return(INIT_SUCCEEDED);
   }
@@ -54,6 +60,16 @@ void OnDeinit(const int reason)
 void OnTick()
   {
    
+     if (
+      DayOfWeek()<1 || 
+      DayOfWeek()>5 ||
+      TimeHour(TimeLocal())<startHour || 
+      TimeHour(TimeLocal())> endHour ||
+      ( TimeHour(TimeLocal())== endHour &&  TimeMinute(TimeLocal())>=endMinute)) {
+         closeAllPendingOrders(myMagic);
+         closeAllOpenOrders(myMagic);
+      return;
+   }
       
    if(lastTradeTime == Time[0]) {
       return;
@@ -86,6 +102,13 @@ void OnTick()
    ObjectSetInteger(0,screenLowLine,OBJPROP_COLOR,clrBlue); 
    ObjectSetInteger(0,screenLowLine,OBJPROP_STYLE,STYLE_SOLID);
    ObjectSetInteger(0,screenLowLine,OBJPROP_WIDTH,3); 
+   
+   ObjectDelete(screenRect);
+   
+   ObjectCreate(screenRect, OBJ_RECTANGLE, 0,TimeCurrent()-60*boringCandles*Period(),highestHigh,TimeCurrent(),lowestLow);
+   ObjectSet(screenRect, OBJPROP_BACK, true);
+   ObjectSet(screenRect, OBJPROP_COLOR, clrBlue);
+   ObjectSet(screenRect, OBJPROP_STYLE, STYLE_SOLID);
 
     
    if (
@@ -100,17 +123,17 @@ void OnTick()
    
    
   
-   if (TimeHour(TimeLocal())>8) {
+   
       
-      if (
-         (boringRange > (highestHigh - lowestLow)  && (0==openPendingPos)) ||
-         //if there is just one open pending order, we can create another one (likely in the other direction)
-         (openPos > 0 && 0 <=currentRisk(myMagic) && (openPendingPos + openPos)<maxOpenPositions) 
-      ) {
-         openLongPosition(lots(baseLots,accountSize),highestHigh + buffer, initialStop ,fixedTakeProfit);
-         openShortPosition(lots(baseLots,accountSize),lowestLow - buffer, initialStop, fixedTakeProfit);
-      }
+   if (
+      (boringRange > (highestHigh - lowestLow)  && (0==openPendingPos)) ||
+      //if there is just one open pending order, we can create another one (likely in the other direction)
+      (openPos > 0 && 0 <=currentRisk(myMagic) && (openPendingPos + openPos)<maxOpenPositions) 
+   ) {
+      openLongPosition(lots(baseLots,accountSize),highestHigh + buffer, initialStop ,fixedTakeProfit);
+      openShortPosition(lots(baseLots,accountSize),lowestLow - buffer, initialStop, fixedTakeProfit);
    }
+
    
    if (trailInProfit > 0) {
       RefreshRates();
