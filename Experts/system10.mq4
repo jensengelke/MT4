@@ -3,7 +3,7 @@
 //|                                                    morning range |
 //|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
-#property copyright "morning range"
+#property copyright "stay in morning range"
 #property link      "https://www.mql5.com"
 #property version   "1.00"
 #property strict
@@ -98,36 +98,42 @@ void OnTick()
       if (  0 == OrdersTotal() && 
             Bid < rangeTop &&
             Ask > rangeBottom) {
-            
-         double stopLoss = rangeBottom + ((rangeTop-rangeBottom)/2);
-         if (initialStop > 0 && stopLoss > rangeTop - initialStop) {
-            stopLoss = rangeTop - initialStop;
-         } 
-         double tp = 0;
-         if (fixedTakeProfit > 0) {
-            tp = rangeTop + buffer + fixedTakeProfit;
-         }
-         double lots = lotsByRisk(rangeTop + buffer - stopLoss,riskSize,lotDigits);
-         PrintFormat("buy: price=%.2f,,stop=%.2f,tp=%.2f,lots=%.2f",rangeTop+buffer,stopLoss,tp,lots);
-         if (lots>0) {
-            OrderSend(Symbol(),OP_BUYSTOP,lots,rangeTop + buffer, 2, stopLoss ,tp,NULL,myMagic,0,clrGreen);      
+         double targetPrice = rangeTop - buffer; 
+         if (Ask < targetPrice) {  
+            double stopLoss = rangeTop + buffer;
+            if (initialStop > 0 && stopLoss > rangeTop + initialStop) {
+               stopLoss = rangeTop + initialStop;
+            } 
+            double tp = 0;
+            if (fixedTakeProfit > 0) {
+               tp = targetPrice - fixedTakeProfit;
+            }
+            //double lots = lotsByRisk(stopLoss - targetPrice,riskSize,lotDigits);
+            double lots = 1.0;
+            PrintFormat("sell: price=%.5f,ranetop=%.5f, stop=%.5f,tp=%.5f,lots=%.2f, fixTP=%.6f",targetPrice,rangeTop,stopLoss,tp,lots,fixedTakeProfit);
+            if (lots>0) {
+               OrderSend(Symbol(),OP_SELLLIMIT,lots,rangeTop - buffer, 2, stopLoss ,tp,NULL,myMagic,0,clrGreen);      
+            }
          }
          
-         stopLoss = rangeBottom + ((rangeTop-rangeBottom)/2);
-         if (initialStop > 0 && stopLoss < rangeBottom + initialStop) {
-            stopLoss = rangeBottom + initialStop;
-         }
-         tp = 0;
-         if (fixedTakeProfit > 0) {
-            tp = rangeTop - buffer - fixedTakeProfit;
-         }
-         lots = lotsByRisk(stopLoss - rangeBottom - buffer,riskSize,lotDigits);
-         PrintFormat("sell: price=%.2f,rangeBottom=%.2f,stop=%.2f,tp=%.2f",rangeBottom - buffer,rangeBottom, stopLoss,tp);
-         if (lots>0) {
-            OrderSend(Symbol(),OP_SELLSTOP,lots,rangeBottom - buffer, 2, stopLoss ,tp,NULL,myMagic,0,clrRed);      
+         if (Bid > rangeBottom+buffer) {
+                  
+            double stopLoss = rangeBottom - buffer;
+            if (initialStop > 0 && stopLoss > rangeBottom - initialStop) {
+               stopLoss = rangeBottom - initialStop;
+            }
+            double tp = 0;
+            if (fixedTakeProfit > 0) {
+               tp = rangeBottom + buffer + fixedTakeProfit;
+            }
+            //double lots = lotsByRisk(rangeBottom + buffer-stopLoss,riskSize,lotDigits);
+            double lots =1.0;
+            PrintFormat("buy: price=%.5f,rangeBottom=%.5f,stop=%.5f,tp=%.5f,lots=%.2f",rangeBottom - buffer,rangeBottom, stopLoss,tp,lots);
+            if (lots>0) {
+               OrderSend(Symbol(),OP_BUYLIMIT,lots,rangeBottom + buffer, 2, stopLoss ,tp,NULL,myMagic,0,clrRed);      
+            }
          }
       }
-      
    
   }
 //+------------------------------------------------------------------+

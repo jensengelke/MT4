@@ -188,3 +188,151 @@ bool isHandelszeit(int startHour, int startMinute, int endHour, int endMinute) {
          
    return isHandelszeit(startTimeString, endTimeString);
 }
+
+void trailInProfit(int myMagic, double distance) {
+      if (0 == distance) return;
+      RefreshRates();
+      double stopForLong = Bid - distance;
+      double stopForShort = Ask + distance;
+     
+      trail(myMagic,stopForShort,stopForLong,true);
+}
+
+void stopAufEinstand(int myMagic, double distance) {
+   if (0==distance) return;
+    double spread = NormalizeDouble(Ask - Bid, Digits);
+    
+    
+      
+      for (int i=OrdersTotal();i>=0;i--) {
+         OrderSelect(i,SELECT_BY_POS,MODE_TRADES);         
+         if (OrderMagicNumber() != myMagic) {continue;}
+         if (OrderSymbol() != Symbol()) {continue;}
+         if (OrderType()==OP_BUY) {
+            if ((OrderOpenPrice() + distance) <= Bid) {
+               double targetStop = NormalizeDouble(OrderOpenPrice() + spread,Digits );
+               if (OrderStopLoss() < targetStop)  {
+                  PrintFormat("Stop auf Einstand long: OrderOpenPrice=%.2f, spread = %.2f, Bid=%.2f, oldstop=%.2f, targetStop=%.2f",OrderOpenPrice(),spread, Bid, OrderStopLoss(),targetStop);
+                  if (!OrderModify(OrderTicket(),0,targetStop,0,0,clrGreen)) {
+                          PrintFormat("last error stop auf einstand:%i; bid=%.5f, ask=%.5f, orderOpenPrice=%.5f, newStop=%.5f, oldStop=%.5f ",
+                           GetLastError(), Bid, Ask, OrderOpenPrice(), (OrderOpenPrice() + spread),OrderStopLoss());
+                  }
+               }
+            }
+         }
+         if (OrderType()==OP_SELL) {
+            double targetStop = NormalizeDouble(OrderOpenPrice() - spread,Digits );
+            if ((OrderOpenPrice() - distance) >= Ask && OrderStopLoss() > targetStop) {
+               
+               PrintFormat("Stop auf Einstand short: OrderOpenPrice=%.2f, spread = %.2f, oldstop=%.2f, Ask=%.2f, targetstop=%.2f",OrderOpenPrice(),spread, OrderStopLoss(),Ask, targetStop);
+               if (!OrderModify(OrderTicket(),0,targetStop,0,0,clrGreen)) {
+                     PrintFormat("last error stop auf einstand short:%i; bid=%.5f, ask=%.5f, orderOpenPrice=%.5f, newStop=%.5f, oldStop=%.5f  ",
+                        GetLastError(), Bid, Ask, OrderOpenPrice(), (OrderOpenPrice() - spread),OrderStopLoss());                
+               }
+            }
+         }
+      }
+}
+
+void trailWithLastXCandle(int myMagic, int x) {
+
+      if (0 == x) return;
+      RefreshRates();
+      double stopForLong = Low[iLowest(NULL,PERIOD_CURRENT,MODE_LOW,x,0)];
+      double stopForShort = High[iHighest(NULL,PERIOD_CURRENT,MODE_HIGH,x,0)];
+      trail(myMagic,stopForShort,stopForLong, false);
+ 
+}
+
+void trail(int myMagic, double stopForShort, double stopForLong, bool inProfit) {
+     for (int i=OrdersTotal();i>=0;i--) {
+         OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
+         if (OrderMagicNumber() != myMagic) {continue;}
+         if (OrderSymbol() != Symbol()) {continue;}
+         if (OrderProfit() > 0) {
+            if (OrderType() == OP_BUY && stopForLong > 0) {
+               if (OrderStopLoss() < stopForLong) {
+                 if (stopForLong > (OrderOpenPrice() + (Ask-Bid)) || !inProfit) {
+                    if (!OrderModify(OrderTicket(),0,stopForLong,OrderTakeProfit(),0,clrGreen)) {
+                     PrintFormat("last error trail long:%i ",GetLastError());                     
+                    }
+                 }
+               }
+               continue;
+            } 
+            if (OrderType() == OP_SELL && stopForShort > 0) {
+               if (OrderStopLoss() > stopForShort) {
+                  if (stopForShort < (OrderOpenPrice() - (Ask-Bid)) || !inProfit) {
+                     if (!OrderModify(OrderTicket(),0,stopForShort,OrderTakeProfit(),0,clrRed)) {
+                       PrintFormat("last error trail short:%i ",GetLastError());                      
+                     }
+                  }
+               }
+            }
+         }
+     }
+}
+
+void trailWithMA(int myMagic, double maValue) {
+
+      if (0 == maValue) return;
+      RefreshRates();
+      trail(myMagic,maValue,maValue,false);
+}
+
+
+int openLongPosition(int myMagic, double lots, double price, double stopLoss, double takeProfit) {
+   RefreshRates();
+   
+   double orderLots = NormalizeDouble(lots,1);
+   double orderPrice = NormalizeDouble(price,Digits);
+   double orderStop = NormalizeDouble(stopLoss,Digits);
+   double orderProfit = NormalizeDouble(takeProfit,Digits);
+   
+   int ticket = OrderSend(NULL,OP_BUY,orderLots,orderPrice,3, orderStop,orderProfit,NULL,myMagic,0,clrGreen);     
+   if (-1 == ticket) {
+      Print("buy last error: " + GetLastError());   
+   } else {
+     // Print("ticket:" + ticket);
+   }
+   
+   return ticket;
+}
+
+int openShortPosition(int myMagic, double lots, double price, double stopLoss, double takeProfit) {
+   RefreshRates();
+   
+   double orderLots = NormalizeDouble(lots,1);
+   double orderPrice = NormalizeDouble(price,Digits);
+   double orderStop = NormalizeDouble(stopLoss,Digits);
+   double orderProfit = NormalizeDouble(takeProfit,Digits);
+   
+   int ticket = OrderSend(NULL,OP_SELL,orderLots,orderPrice, 3,orderStop,orderProfit,NULL,myMagic,0,clrRed);
+   if (-1 == ticket) {
+      Print("sell last error: " + GetLastError());   
+   } else {
+      //Print("ticket:" + ticket);
+   }
+   
+   return ticket;
+}
+
+void timeout(int myMagic, datetime closeIfOpenedBefore) {
+   for (int i=OrdersTotal();i>=0;i--) {
+         OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
+         if (OrderMagicNumber() != myMagic) {continue;}
+         if (OrderSymbol() != Symbol()) {continue;}
+         if (OrderOpenTime()< closeIfOpenedBefore) {
+         
+            if (OrderType() == OP_BUY) {
+               OrderClose(OrderTicket(),OrderLots(),Bid,3,clrGreen);
+               continue;
+            } 
+            if (OrderType() == OP_SELL) {
+               OrderClose(OrderTicket(),OrderLots(),Ask,3,clrGreen);
+               continue;
+            }
+         }
+         
+     }
+}

@@ -26,6 +26,7 @@ extern double buffer = 5.0;
 extern int orderExpiryInMin = 3600;
 static datetime lastTradeTime = NULL;
 extern int maxOpenPositions = 5;
+extern double stopAufEinstandBei = 20.0;
 
 string screenString = "StatusWindow";
 string screenHighLine = "highLine";
@@ -60,16 +61,14 @@ void OnDeinit(const int reason)
 void OnTick()
   {
    
-     if (
-      DayOfWeek()<1 || 
-      DayOfWeek()>5 ||
-      TimeHour(TimeLocal())<startHour || 
-      TimeHour(TimeLocal())> endHour ||
-      ( TimeHour(TimeLocal())== endHour &&  TimeMinute(TimeLocal())>=endMinute)) {
+   if (!isHandelszeit(startHour,startMinute,endHour,endMinute)) {
          closeAllPendingOrders(myMagic);
          closeAllOpenOrders(myMagic);
       return;
    }
+   
+   stopAufEinstand(myMagic,stopAufEinstandBei);
+   trailInProfit(myMagic,trailInProfit);
       
    if(lastTradeTime == Time[0]) {
       return;
@@ -130,35 +129,13 @@ void OnTick()
       //if there is just one open pending order, we can create another one (likely in the other direction)
       (openPos > 0 && 0 <=currentRisk(myMagic) && (openPendingPos + openPos)<maxOpenPositions) 
    ) {
+      Print("Opening Positions");
       openLongPosition(lots(baseLots,accountSize),highestHigh + buffer, initialStop ,fixedTakeProfit);
       openShortPosition(lots(baseLots,accountSize),lowestLow - buffer, initialStop, fixedTakeProfit);
    }
 
    
-   if (trailInProfit > 0) {
-      RefreshRates();
-      double stopForLong = Bid - trailInProfit;
-      double stopForShort = Ask + trailInProfit;
-     
-      for (int i=OrdersTotal();i>=0;i--) {
-         OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
-         if (OrderMagicNumber() != myMagic) {continue;}
-         if (OrderSymbol() != Symbol()) {continue;}
-         if (OrderProfit() > 0) {
-            if (OrderType() == OP_BUY && stopForLong > 0) {
-               if (OrderStopLoss() < stopForLong) {
-                 OrderModify(OrderTicket(),0,stopForLong,OrderTakeProfit(),0,clrGreen);
-               }
-               continue;
-            } 
-            if (OrderType() == OP_SELL && stopForShort > 0) {
-               if (OrderStopLoss() > stopForShort) {
-                  OrderModify(OrderTicket(),0,stopForShort,OrderTakeProfit(),0,clrRed);
-               }
-            }
-         }
-     }
-   }
+   
    
   }
 //+------------------------------------------------------------------+
@@ -175,7 +152,9 @@ void openLongPosition(double lots, double price, double stopLoss, double takePro
       tp = price +  takeProfit;
    }
    highestHighExecution = price;
-   OrderSend(NULL,OP_BUYSTOP,lots,price,5.0,stop,tp,NULL,myMagic,TimeLocal()+(orderExpiryInMin),clrGreen);        
+   if (-1==OrderSend(NULL,OP_BUYSTOP,lots,price,5.0,stop,tp,NULL,myMagic,TimeCurrent()+(orderExpiryInMin),clrGreen)) {
+      Print("last error: " + GetLastError());
+   }
 }
 
 void openShortPosition(double lots, double price, double stopLoss, double takeProfit) {

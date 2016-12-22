@@ -19,13 +19,15 @@ extern double accountSize = 1000.0;
 extern double fixedTakeProfit = 0.0;
 extern double initialStop = 60.0;
 extern double stopAufEinstandBei = 5.0;
+extern double trailInProfit = 30;
 extern int emaPeriodSlow = 40;
 extern int emaPeriodFast = 7;
-extern double steil = 0.03;
+extern int  flatPeriod=16;
+extern double flatThreshold =1.005;
+extern int trailWithCandle = 1;
 
 string screenString = "StatusWindow";
-double maxAcc = 1;
-double minAcc = 1;
+datetime lastcandle = NULL;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -50,12 +52,30 @@ void OnDeinit(const int reason)
 //+------------------------------------------------------------------+
 void OnTick()
   {
+  
+  
+  
   if (!isHandelszeit(startTime,endTime)) {
          closeAllPendingOrders(myMagic);
          closeAllOpenOrders(myMagic);
       return;
    }
    
+   stopAufEinstand(myMagic, stopAufEinstandBei);
+   if (trailInProfit > 0) {
+      trailInProfit(myMagic,trailInProfit);
+   }
+   
+   if (lastcandle == Time[0]) {
+         return;
+   } else {
+      lastcandle = Time[0];
+   }
+   
+   if (trailWithCandle>0) {
+      trailWithLastXCandle(myMagic,trailWithCandle); 
+   }
+      
    double slowEMA = iMA(NULL,PERIOD_CURRENT,emaPeriodSlow,0,MODE_EMA,PRICE_CLOSE,0);
    double slowEMAPrev = iMA(NULL,PERIOD_CURRENT,emaPeriodSlow,0,MODE_EMA,PRICE_CLOSE,1);
    
@@ -63,17 +83,16 @@ void OnTick()
    double fastEMAPrev = iMA(NULL,PERIOD_CURRENT,emaPeriodFast,0,MODE_EMA,PRICE_CLOSE,1);
    
    double spread = MathAbs(Bid-Ask);
-   
-   double accelerator = fastEMA / fastEMAPrev;
-   
-   if (accelerator>maxAcc) {
-      maxAcc = accelerator;
+   double minSlowEMA = slowEMA;
+   double maxSlowEMA = slowEMA;
+   for (int i=1;i<flatPeriod;i++) {
+      double ma = iMA (NULL, PERIOD_CURRENT,emaPeriodSlow,0,MODE_EMA,PRICE_CLOSE,i);
+      if (ma>maxSlowEMA) maxSlowEMA=ma;
+      if (ma<minSlowEMA) minSlowEMA=ma;
    }
-   if (accelerator<minAcc) {
-      minAcc = accelerator;
-   }
-   string comment = StringFormat("current=%.8f, min=%.8f, max=%.8f",accelerator,minAcc,maxAcc);
-   Comment(comment);
+   
+   double maRatio = maxSlowEMA / minSlowEMA;
+   //double rsi = iRSI(NULL,PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,0);
       
    int direction = currentDirectionOfOpenPositions(myMagic);
    
@@ -86,7 +105,12 @@ void OnTick()
          closeLongPositions(myMagic);
       }
       
-      if (currentRisk(myMagic)<=0 && Bid < fastEMA) {      
+      if (currentRisk(myMagic)<=0 && 
+         Bid < fastEMA && 
+         Close[1] < fastEMA &&
+         //(rsi<minBlackOutRSI || rsi > maxBlackOutRSI)
+         maRatio > flatThreshold
+         ) {      
          openShortPosition();
       }
    } 
@@ -98,31 +122,16 @@ void OnTick()
       if (direction < 0) {
          closeShortPositions(myMagic);
       }
-      if (currentRisk(myMagic)<=0 && Ask > fastEMA) {
+      if (  currentRisk(myMagic)<=0 && 
+            Ask > fastEMA && 
+            Close[1] > fastEMA &&
+           // (rsi<minBlackOutRSI || rsi > maxBlackOutRSI)
+            maRatio > flatThreshold
+            ) {
          openLongPosition();
       }
    }
-   
-   if (stopAufEinstandBei >0) {
-      for (int i=OrdersTotal();i>=0;i--) {
-         if (OrderMagicNumber() != myMagic) {continue;}
-         if (OrderSymbol() != Symbol()) {continue;}
-         if (OrderType()==OP_BUY) {
-            if ((OrderOpenPrice() + stopAufEinstandBei) <= Bid && (OrderStopLoss() <(OrderOpenPrice() + spread) )) {
-               PrintFormat("Stop auf Einstand: OrderOpenPrice=%.2f, spread = %.2f, stop=%.2f, Bid=%.2f",OrderOpenPrice(),spread, (OrderOpenPrice()+spread),Bid);
-               if (!OrderModify(OrderTicket(),0,(OrderOpenPrice() + spread),OrderTakeProfit(),0,clrGreen)){
-                       PrintFormat("last error:%i ",GetLastError());                     
-               }
-            }
-         } else if (( OrderOpenPrice() - stopAufEinstandBei) >= Ask && (OrderStopLoss() >(OrderOpenPrice() - spread) )) {
-               PrintFormat("Stop auf Einstand: OrderOpenPrice=%.2f, spread = %.2f, stop=%.2f, Ask=%.2f",OrderOpenPrice(),spread, (OrderOpenPrice()-spread),Ask);
-               if (!OrderModify(OrderTicket(),0,(OrderOpenPrice() - spread),OrderTakeProfit(),0,clrGreen)){
-                       PrintFormat("last error:%i ",GetLastError());                     
-               }
-         }
-      }
-   }
-   
+  
   }
 //+------------------------------------------------------------------+
 void openLongPosition() {
