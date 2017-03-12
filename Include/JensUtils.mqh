@@ -48,6 +48,14 @@ double lotsByRisk(double points, double riskSize, int lotDigits) {
    return lots;   
 }
 
+double lotsByRiskFreeMargin(double riskInPercent, double stopDistance) {
+   double moneyToRisk = AccountFreeMargin()*riskInPercent/100;   
+   double lots = (moneyToRisk / (stopDistance*MarketInfo(Symbol(),MODE_TICKVALUE))/100);
+   if (lots>MarketInfo(Symbol(),MODE_MAXLOT)) return MarketInfo(Symbol(),MODE_MAXLOT);   
+   lots = NormalizeDouble(lots,1);
+   return lots;
+}
+
 void closeAllPendingOrders(int myMagic) {
  for (int i=OrdersTotal();i>=0;i--) {
       OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
@@ -200,7 +208,7 @@ void trailInProfit(int myMagic, double distance) {
 
 void stopAufEinstand(int myMagic, double distance) {
    if (0==distance) return;
-    double spread = NormalizeDouble(Ask - Bid, Digits);
+    double spread = NormalizeDouble(Ask - Bid, Digits)+0.5;
     
     
       
@@ -213,7 +221,7 @@ void stopAufEinstand(int myMagic, double distance) {
                double targetStop = NormalizeDouble(OrderOpenPrice() + spread,Digits );
                if (OrderStopLoss() < targetStop)  {
                   PrintFormat("Stop auf Einstand long: OrderOpenPrice=%.2f, spread = %.2f, Bid=%.2f, oldstop=%.2f, targetStop=%.2f",OrderOpenPrice(),spread, Bid, OrderStopLoss(),targetStop);
-                  if (!OrderModify(OrderTicket(),0,targetStop,0,0,clrGreen)) {
+                  if (!OrderModify(OrderTicket(),0,targetStop,OrderTakeProfit(),0,clrGreen)) {
                           PrintFormat("last error stop auf einstand:%i; bid=%.5f, ask=%.5f, orderOpenPrice=%.5f, newStop=%.5f, oldStop=%.5f ",
                            GetLastError(), Bid, Ask, OrderOpenPrice(), (OrderOpenPrice() + spread),OrderStopLoss());
                   }
@@ -225,7 +233,7 @@ void stopAufEinstand(int myMagic, double distance) {
             if ((OrderOpenPrice() - distance) >= Ask && OrderStopLoss() > targetStop) {
                
                PrintFormat("Stop auf Einstand short: OrderOpenPrice=%.2f, spread = %.2f, oldstop=%.2f, Ask=%.2f, targetstop=%.2f",OrderOpenPrice(),spread, OrderStopLoss(),Ask, targetStop);
-               if (!OrderModify(OrderTicket(),0,targetStop,0,0,clrGreen)) {
+               if (!OrderModify(OrderTicket(),0,targetStop,OrderTakeProfit(),0,clrGreen)) {
                      PrintFormat("last error stop auf einstand short:%i; bid=%.5f, ask=%.5f, orderOpenPrice=%.5f, newStop=%.5f, oldStop=%.5f  ",
                         GetLastError(), Bid, Ask, OrderOpenPrice(), (OrderOpenPrice() - spread),OrderStopLoss());                
                }
@@ -280,8 +288,11 @@ void trailWithMA(int myMagic, double maValue) {
       trail(myMagic,maValue,maValue,false);
 }
 
-
 int openLongPosition(int myMagic, double lots, double price, double stopLoss, double takeProfit) {
+   return openLongPosition(myMagic,lots,price,stopLoss,takeProfit,NULL);   
+}
+
+int openLongPosition(int myMagic, double lots, double price, double stopLoss, double takeProfit, string comment) {
    RefreshRates();
    
    double orderLots = NormalizeDouble(lots,1);
@@ -289,7 +300,7 @@ int openLongPosition(int myMagic, double lots, double price, double stopLoss, do
    double orderStop = NormalizeDouble(stopLoss,Digits);
    double orderProfit = NormalizeDouble(takeProfit,Digits);
    
-   int ticket = OrderSend(NULL,OP_BUY,orderLots,orderPrice,3, orderStop,orderProfit,NULL,myMagic,0,clrGreen);     
+   int ticket = OrderSend(NULL,OP_BUY,orderLots,orderPrice,3, orderStop,orderProfit,comment,myMagic,0,clrGreen);     
    if (-1 == ticket) {
       Print("buy last error: " + GetLastError());   
    } else {
@@ -300,6 +311,10 @@ int openLongPosition(int myMagic, double lots, double price, double stopLoss, do
 }
 
 int openShortPosition(int myMagic, double lots, double price, double stopLoss, double takeProfit) {
+   return openShortPosition(myMagic,lots,price,stopLoss,takeProfit,NULL);
+}
+
+int openShortPosition(int myMagic, double lots, double price, double stopLoss, double takeProfit,string comment) {
    RefreshRates();
    
    double orderLots = NormalizeDouble(lots,1);
@@ -307,7 +322,7 @@ int openShortPosition(int myMagic, double lots, double price, double stopLoss, d
    double orderStop = NormalizeDouble(stopLoss,Digits);
    double orderProfit = NormalizeDouble(takeProfit,Digits);
    
-   int ticket = OrderSend(NULL,OP_SELL,orderLots,orderPrice, 3,orderStop,orderProfit,NULL,myMagic,0,clrRed);
+   int ticket = OrderSend(NULL,OP_SELL,orderLots,orderPrice, 3,orderStop,orderProfit,comment,myMagic,0,clrRed);
    if (-1 == ticket) {
       Print("sell last error: " + GetLastError());   
    } else {
@@ -336,3 +351,4 @@ void timeout(int myMagic, datetime closeIfOpenedBefore) {
          
      }
 }
+

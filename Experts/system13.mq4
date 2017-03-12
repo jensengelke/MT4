@@ -86,7 +86,7 @@ void OnTick()
          if (fixedTakeProfit >0) tp = Bid - fixedTakeProfit;
          double stop = 0;
          if (trailWithLastXCandle > 0) {
-            stop = High[iHighest(NULL,PERIOD_CURRENT,MODE_HIGH,trailWithLastXCandle,0)];
+            stop = High[iHighest(NULL,PERIOD_CURRENT,MODE_HIGH,trailWithLastXCandle+1,0)];
          }
          if (stop > Bid+initialStop) stop = Bid+initialStop;
          OrderSend(NULL,OP_SELL,lots(baseLots,accountSize),Bid ,3,stop,tp,NULL,myMagic,0,clrRed);
@@ -98,7 +98,7 @@ void OnTick()
          if (fixedTakeProfit > 0) tp = Ask+fixedTakeProfit;
          double stop = 0;
          if (trailWithLastXCandle > 0) {
-            stop = Low[iLowest(NULL,PERIOD_CURRENT,MODE_LOW,trailWithLastXCandle,0)];
+            stop = Low[iLowest(NULL,PERIOD_CURRENT,MODE_LOW,trailWithLastXCandle+1,0)];
          }
          if (stop<Ask-initialStop) stop = Ask-initialStop;
          OrderSend(NULL,OP_BUY,lots(baseLots,accountSize),Ask,3,Ask - initialStop,tp,NULL,myMagic,0,clrGreen);

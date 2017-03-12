@@ -24,6 +24,7 @@ extern double stdDev_threshold = 7.0;
 extern double trailInProfit = 30.0;
 extern int max_open_pos = 4;
 extern double min_ma_roc_in_percent = 0.1;
+extern double riskInPercent = 2.0;
 
 string screenString = "StatusWindow";
 static datetime lastTradeTime = NULL;
@@ -58,14 +59,14 @@ void OnTick()
    }
    
    
-   
-   trailInProfit(myMagic,trailInProfit);
-   stopAufEinstand(myMagic,stopAufEinstandBei);
    if(lastTradeTime == Time[0]) {
       return;
    } else {
       lastTradeTime = Time[0];
    }
+   
+   if (trailInProfit>0) trailInProfit(myMagic,trailInProfit);
+   if (stopAufEinstandBei>0) stopAufEinstand(myMagic,stopAufEinstandBei);
    
    double standardDeviation =iStdDev(NULL,PERIOD_CURRENT,stdDev_period,0,MODE_SMA,PRICE_CLOSE,0);
    double maCurrent = iMA(NULL,PERIOD_CURRENT,stdDev_period,0,MODE_SMA,PRICE_CLOSE,0);
@@ -89,9 +90,13 @@ void OnTick()
 }
 //+------------------------------------------------------------------+
 void openLongPosition() {
-   OrderSend(NULL,OP_BUY,lots(baseLots,accountSize),Ask,3,Ask - initialStop,0,NULL,myMagic,0,clrGreen);
+   double lots = lotsByRiskFreeMargin(riskInPercent,initialStop);
+   Print("lots=",lots);
+   OrderSend(NULL,OP_BUY,lots,Ask,3,Ask - initialStop,0,NULL,myMagic,0,clrGreen);
 }
 
 void openShortPosition() {
-   OrderSend(NULL,OP_SELL,lots(baseLots,accountSize),Bid ,3,Bid+initialStop,0,NULL,myMagic,0,clrGreen);
+   double lots = lotsByRiskFreeMargin(riskInPercent,initialStop);
+   Print("lots=",lots);
+   OrderSend(NULL,OP_SELL,lots,Bid ,3,Bid+initialStop,0,NULL,myMagic,0,clrGreen);
 }
