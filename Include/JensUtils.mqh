@@ -40,11 +40,17 @@ double lots(double baseLots, double accountSize) {
 }
 
 double lotsByRisk(double points, double riskSize, int lotDigits) {
+   if (0==points) return 0.0;
    double risk = riskSize * AccountEquity();
    double tickValue = MarketInfo(Symbol(),MODE_TICKVALUE);
    double tickSize =  MarketInfo(Symbol(),MODE_TICKSIZE);
    double lots = (risk * tickValue) / (points*tickSize);
    lots = NormalizeDouble(lots,lotDigits);
+   
+   if (lots > MarketInfo(Symbol(),MODE_MAXLOT)) {
+      lots = MarketInfo(Symbol(),MODE_MAXLOT);
+   }
+   
    return lots;   
 }
 
@@ -208,7 +214,7 @@ void trailInProfit(int myMagic, double distance) {
 
 void stopAufEinstand(int myMagic, double distance) {
    if (0==distance) return;
-    double spread = NormalizeDouble(Ask - Bid, Digits)+0.5;
+    double spread = NormalizeDouble(Ask - Bid, Digits)+1;
     
     
       
@@ -347,8 +353,36 @@ void timeout(int myMagic, datetime closeIfOpenedBefore) {
                OrderClose(OrderTicket(),OrderLots(),Ask,3,clrGreen);
                continue;
             }
-         }
-         
+         }        
      }
+}
+
+
+bool orderExists(int myMagic, int longOrShort, double price) {
+   bool exists = false;
+   
+      for (int i=OrdersTotal();i>=0;i--) {
+         OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
+         if (OrderMagicNumber() != myMagic) {continue;}
+         if (OrderSymbol() != Symbol()) {continue;}
+         if (longOrShort==1) {
+            if (OrderType() == OP_BUY || OrderType() == OP_BUYLIMIT || OrderType() == OP_BUYSTOP) {
+               if (OrderOpenPrice() == price) {
+                  exists = true;
+                  break;
+               }
+            }
+         }
+         if (longOrShort==-1) {
+            if (OrderType() == OP_SELL || OrderType() == OP_SELLLIMIT || OrderType() == OP_SELLSTOP) {
+               if (OrderOpenPrice() == price) {
+                  exists = true;
+                  break;
+               }
+            }
+         }
+     }
+     
+     return exists;
 }
 

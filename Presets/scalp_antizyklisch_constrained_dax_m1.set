@@ -1,0 +1,9 @@
+startTime=08:15
+endTime=21:30
+myMagic=20170313
+trailInProfit=5.0
+riskInPercent=1
+buffer=2.0
+rangePeriod=15
+stopAufEinstand=3.0
+maxVola=20

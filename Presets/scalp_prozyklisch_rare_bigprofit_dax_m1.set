@@ -1,0 +1,10 @@
+startTime=09:15
+endTime=21:58
+myMagic=20170312
+fixedTakeProfit=0.0
+trailInProfit=5.0
+initialStop=5.0
+riskInPercent=3.0
+breakoutPeriod=30
+stopAufEinstand=3.0
+minVola=45
