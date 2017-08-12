@@ -1,145 +1,98 @@
 //+------------------------------------------------------------------+
-//|                                               Moving Average.mq4 |
-//|                   Copyright 2005-2014, MetaQuotes Software Corp. |
-//|                                              http://www.mql4.com |
+//|                                                  Stundentest.mq4 |
+//|                                                          DerJens |
+//|                                             https://www.mql5.com |
 //+------------------------------------------------------------------+
-#property copyright   "2005-2014, MetaQuotes Software Corp."
-#property link        "http://www.mql4.com"
-#property description "Moving Average sample expert advisor"
+#property copyright "DerJens"
+#property link      "https://www.mql5.com"
+#property version   "1.00"
+#property strict
+#include "../Include/JensUtils.mqh";
+extern int myMagic = 201700808;
 
-#define MAGICMA  20131111
-//--- Inputs
-input double Lots          =0.1;
-input double MaximumRisk   =0.02;
-input double DecreaseFactor=3;
-input int    MovingPeriod  =12;
-input int    MovingShift   =6;
+extern string startTime = "08:00";
+extern string endTime = "21:58";
+
+//extern double fixedLots = 1.0;
+extern double risk = 1.0;
+extern bool trace = true;
+
+extern int slowSmoothedMAperiod=200;
+extern int fastEmaPeriod = 10;
+
+extern double initialStop = 30.0;
+extern double trail = 60.0;
+//extern double takeProfit = 20.0;
+
+static datetime lastTradeTime = NULL;
+static int symbolDigits = -1;
+static int lotDigits = -1;
+
+
 //+------------------------------------------------------------------+
-//| Calculate open positions                                         |
+//| Expert initialization function                                   |
 //+------------------------------------------------------------------+
-int CalculateCurrentOrders(string symbol)
+int OnInit()
   {
-   int buys=0,sells=0;
+   EventSetTimer(60);
+   double lotstep = MarketInfo(Symbol(),MODE_LOTSTEP);
+   if (lotstep == 1.0)        lotDigits = 0;
+   if (lotstep == 0.1)        lotDigits = 1;
+   if (lotstep == 0.01)       lotDigits = 2;
+   if (lotstep == 0.001)      lotDigits = 3;
+   if (lotstep == 0.0001)     lotDigits = 4;
+   if (lotDigits == -1)       return(INIT_FAILED);   
 //---
-   for(int i=0;i<OrdersTotal();i++)
-     {
-      if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==false) break;
-      if(OrderSymbol()==Symbol() && OrderMagicNumber()==MAGICMA)
-        {
-         if(OrderType()==OP_BUY)  buys++;
-         if(OrderType()==OP_SELL) sells++;
-        }
-     }
-//--- return orders volume
-   if(buys>0) return(buys);
-   else       return(-sells);
+
+   symbolDigits = MarketInfo(Symbol(),MODE_DIGITS);
+   PrintFormat("initialized with lotDigits=%i and symboleDigits=%i",lotDigits,symbolDigits);
+   
+   return(INIT_SUCCEEDED);
   }
 //+------------------------------------------------------------------+
-//| Calculate optimal lot size                                       |
+//| Expert deinitialization function                                 |
 //+------------------------------------------------------------------+
-double LotsOptimized()
+void OnDeinit(const int reason)
   {
-   double lot=Lots;
-   int    orders=HistoryTotal();     // history orders total
-   int    losses=0;                  // number of losses orders without a break
-//--- select lot size
-   lot=NormalizeDouble(AccountFreeMargin()*MaximumRisk/1000.0,1);
-//--- calcuulate number of losses orders without a break
-   if(DecreaseFactor>0)
-     {
-      for(int i=orders-1;i>=0;i--)
-        {
-         if(OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)==false)
-           {
-            Print("Error in history!");
-            break;
-           }
-         if(OrderSymbol()!=Symbol() || OrderType()>OP_SELL)
-            continue;
-         //---
-         if(OrderProfit()>0) break;
-         if(OrderProfit()<0) losses++;
-        }
-      if(losses>1)
-         lot=NormalizeDouble(lot-lot*losses/DecreaseFactor,1);
-     }
-//--- return lot size
-   if(lot<0.1) lot=0.1;
-   return(lot);
+    EventKillTimer();   
   }
 //+------------------------------------------------------------------+
-//| Check for open order conditions                                  |
-//+------------------------------------------------------------------+
-void CheckForOpen()
-  {
-   double ma;
-   int    res;
-//--- go trading only for first tiks of new bar
-   if(Volume[0]>1) return;
-//--- get Moving Average 
-   ma=iMA(NULL,0,MovingPeriod,MovingShift,MODE_SMA,PRICE_CLOSE,0);
-//--- sell conditions
-   if(Open[1]>ma && Close[1]<ma)
-     {
-      res=OrderSend(Symbol(),OP_SELL,LotsOptimized(),Bid,3,0,0,"",MAGICMA,0,Red);
-      return;
-     }
-//--- buy conditions
-   if(Open[1]<ma && Close[1]>ma)
-     {
-      res=OrderSend(Symbol(),OP_BUY,LotsOptimized(),Ask,3,0,0,"",MAGICMA,0,Blue);
-      return;
-     }
-//---
-  }
-//+------------------------------------------------------------------+
-//| Check for close order conditions                                 |
-//+------------------------------------------------------------------+
-void CheckForClose()
-  {
-   double ma;
-//--- go trading only for first tiks of new bar
-   if(Volume[0]>1) return;
-//--- get Moving Average 
-   ma=iMA(NULL,0,MovingPeriod,MovingShift,MODE_SMA,PRICE_CLOSE,0);
-//---
-   for(int i=0;i<OrdersTotal();i++)
-     {
-      if(OrderSelect(i,SELECT_BY_POS,MODE_TRADES)==false) break;
-      if(OrderMagicNumber()!=MAGICMA || OrderSymbol()!=Symbol()) continue;
-      //--- check order type 
-      if(OrderType()==OP_BUY)
-        {
-         if(Open[1]>ma && Close[1]<ma)
-           {
-            if(!OrderClose(OrderTicket(),OrderLots(),Bid,3,White))
-               Print("OrderClose error ",GetLastError());
-           }
-         break;
-        }
-      if(OrderType()==OP_SELL)
-        {
-         if(Open[1]<ma && Close[1]>ma)
-           {
-            if(!OrderClose(OrderTicket(),OrderLots(),Ask,3,White))
-               Print("OrderClose error ",GetLastError());
-           }
-         break;
-        }
-     }
-//---
-  }
-//+------------------------------------------------------------------+
-//| OnTick function                                                  |
+//| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick()
   {
-//--- check for history and trading
-   if(Bars<100 || IsTradeAllowed()==false)
-      return;
-//--- calculate open orders by current symbol
-   if(CalculateCurrentOrders(Symbol())==0) CheckForOpen();
-   else                                    CheckForClose();
-//---
+      if(DayOfWeek()==0 || DayOfWeek()==6) return;
+          
+      if (TimeCurrent() == lastTradeTime) {
+         return;
+      }
+      lastTradeTime = TimeCurrent();
+      
+      //abort at night
+      if (!isHandelszeit(startTime,endTime)) {
+       //  closeAllPendingOrders(myMagic);
+       //  closeAllOpenOrders(myMagic);
+         return;
+      }   
+      
+      double slow = iMA(Symbol(),PERIOD_CURRENT,slowSmoothedMAperiod,0,MODE_SMMA,PRICE_CLOSE,0);
+      double fast = iMA(Symbol(),PERIOD_CURRENT,fastEmaPeriod,0,MODE_EMA,PRICE_CLOSE,0);
+      
+      double slowPrev = iMA(Symbol(),PERIOD_CURRENT,slowSmoothedMAperiod,0,MODE_SMMA,PRICE_CLOSE,1);
+      double fastPrev = iMA(Symbol(),PERIOD_CURRENT,fastEmaPeriod,0,MODE_EMA,PRICE_CLOSE,1);
+      
+      if (slow > fast && slowPrev < fastPrev) { // short sein
+         if (currentDirectionOfOpenPositions(myMagic)>=0) {
+            closeLongPositions(myMagic);
+            double lots = lotsByRisk(initialStop,risk,lotDigits);
+            OrderSend(Symbol(),OP_SELL,lots,Bid,3,Bid+initialStop,0,NULL,myMagic,0,clrRed);
+         }
+      } else if (slow < fast && slowPrev > fastPrev) { //long sein
+         if (currentDirectionOfOpenPositions(myMagic)<=0) {
+         double lots = lotsByRisk(initialStop,risk,lotDigits);
+            closeShortPositions(myMagic);
+            OrderSend(Symbol(),OP_BUY,lots,Ask,3,Ask-initialStop,0,NULL,myMagic,0,clrRed);
+         }
+      }   
   }
 //+------------------------------------------------------------------+

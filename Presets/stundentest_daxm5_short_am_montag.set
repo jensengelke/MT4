@@ -1,0 +1,12 @@
+myMagic=201700807
+fixedLots=0.0
+risk=3.5
+trace=true
+wochentag=1
+entryHour=10
+entryMin=15
+exitHour=14
+exitMin=54
+initialStop=30
+trail=25
+shortTrades=true
