@@ -10,7 +10,6 @@
 #include "../Include/JensUtils.mqh";
 extern int myMagic = 201700719;
 
-extern int numberOfQuietBars = 6;
 extern string startAt = "10:20";
 extern string flatAfter = "21:45";
 
@@ -26,10 +25,13 @@ extern int stochasticD = 12;
 
 
 extern double risk = 1.0;
+extern int fixedLots = 0.0;
 extern bool trace = true;
 
-extern double initialStop = 10.0;
+extern double initialStop = 20.0;
 extern double takeProfit = 20.0;
+extern double stopAufEinstand = 10.0;
+extern double trailInProfit = 15.0;
 
 static datetime lastTradeTime = NULL;
 static int symbolDigits = -1;
@@ -80,10 +82,15 @@ void OnTick()
       return;
    }
    
-   if (TimeCurrent() == lastTradeTime) {
+   stopAufEinstand(myMagic,stopAufEinstand);
+   trailInProfit(myMagic,trailInProfit);
+   
+   if (Time[0] == lastTradeTime) {
       return;
    }
-   lastTradeTime = TimeCurrent();
+   lastTradeTime = Time[0];
+   
+   
    
    if (isRuhig()) {
       
@@ -95,7 +102,9 @@ void OnTick()
          //short
         // closeLongPositions(myMagic);
          if (currentDirectionOfOpenPositions(myMagic) == 0) {
-            double lots = lotsByRisk(initialStop,risk,lotDigits);
+            double lots = fixedLots;
+            if (lots == 0) 
+               lots = lotsByRisk(initialStop,risk,lotDigits);
             double stop = Bid + initialStop;
             double tp = Bid - takeProfit;
             if (trace) 
@@ -109,7 +118,9 @@ void OnTick()
          //long
          //closeShortPositions(myMagic);
          if (currentDirectionOfOpenPositions(myMagic) == 0) {
-            double lots = lotsByRisk(initialStop,risk,lotDigits);
+            double lots = fixedLots;
+            if (lots == 0) 
+               lots = lotsByRisk(initialStop,risk,lotDigits);
             double stop = Ask - initialStop;
             double tp = Ask + takeProfit;
             if (trace) 
