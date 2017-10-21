@@ -20,12 +20,14 @@ extern double riskInPercent = 1.0;
 extern double fixedLots = 0.0;
 extern double initialStop = 60.0;
 extern double trailInProfit = 100.0;
-extern int maxPos = 5;
+extern int maxPos = 25;
 extern double buffer = 10.0;
 extern int slowSMAperiod = 200;
 extern int rsiPeriod = 10;
 extern double rsiHigh = 85.0;
 extern double rsiLow = 15.0;
+
+extern double adxFilter = 45.0;
 
 extern bool trace = false;
 
@@ -92,9 +94,15 @@ void OnTick()
    double rsi = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,1);
    double prevRsi = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,2);
    double risk = currentRisk(myMagic);
+   int positionsAtRisk = atRiskPositions(myMagic);
+   
    if (trace) 
          PrintFormat("rsi=%.2f,rsi[1]=%.2f, risk=%.2f",rsi,prevRsi, risk);
       
+   bool allowByAdx = true;
+   if (adxFilter > 0.0) {
+      allowByAdx = iADX(Symbol(),PERIOD_CURRENT,14,PRICE_CLOSE,MODE_MAIN,0) > adxFilter;
+   }
    
    if (sma > prevSma) {
    
@@ -104,23 +112,44 @@ void OnTick()
       
       
          
-      if (  prevRsi < rsiLow && 
+      if (  allowByAdx &&
+            prevRsi < rsiLow && 
             rsi>prevRsi &&
             risk <=0 && 
             countOpenPositions(myMagic) < maxPos &&
-            //currentDirectionOfOpenPositions(myMagic) >= 0 &&
             currentRisk(myMagic) <= 0 &&
+            positionsAtRisk <=1 &&
             Close[0]>sma) {
          
+         int openPos = countOpenPositions(myMagic);
+            
          double price = Ask;
          double stop = price - initialStop ;
          double lots = fixedLots;
-         if (lots == 0) 
-            lots = lotsByRisk(initialStop,riskInPercent,lotDigits);
-         if (trace) {
-            PrintFormat("buying %.1f lots at %.2f with stop at %.2f", lots,price,stop);
+         if (lots == 0) {
+            if (openPos < 3) {
+               lots = lotsByRisk(initialStop,riskInPercent,lotDigits);
+            } else {
+               double securedProfit = securedProfit(myMagic);
+               if (AccountEquity()*riskInPercent > 0.5*securedProfit) {
+                  if (trace) 
+                     PrintFormat("Skipping signal, (half of) locked in profit %.2f is less than %i percent of equity (%.2f): %.2f",securedProfit,riskInPercent,AccountEquity(),(riskInPercent*AccountEquity()));
+               } else {
+                  double riskInPercentByProfit = (0.5*securedProfit) / AccountEquity();
+                  lots = lotsByRisk(initialStop,riskInPercentByProfit,lotDigits);
+                  
+                  if (trace) 
+                     PrintFormat("Trading signal, (half of) locked in profit %.2f is more than %i percent of equity (%.2f): %.2f",securedProfit,riskInPercent,AccountEquity(),(riskInPercent*AccountEquity()));
+               }
+            }  
          }
-         OrderSend(Symbol(),OP_BUY,lots,price,3,stop,0,"simple MA RSI",myMagic,0,clrGreen);
+         
+         if (lots>0) {
+            if (trace) {
+               PrintFormat("buying %.1f lots at %.2f with stop at %.2f", lots,price,stop);
+            }
+            OrderSend(Symbol(),OP_BUY,lots,price,3,stop,0,"simple MA RSI",myMagic,0,clrGreen);
+         }
       } 
       
    }
@@ -129,22 +158,41 @@ void OnTick()
          closeLongPositions(myMagic);
       }
       
-      if (  prevRsi > rsiHigh &&
+      if (  allowByAdx &&
+            prevRsi > rsiHigh &&
             rsi < prevRsi &&
             risk <=0 && 
             countOpenPositions(myMagic) < maxPos  && 
-            //currentDirectionOfOpenPositions(myMagic) <= 0 &&
             currentRisk(myMagic) <= 0 &&
+            positionsAtRisk <=1 &&
             Close[0] < sma) {
          double price = Bid;
          double stop = price + initialStop;
          double lots = fixedLots;
-         if (lots == 0) 
-            lots = lotsByRisk(initialStop,riskInPercent,lotDigits);
-         if (trace) {
-            PrintFormat("selling %.2f lots at %.2f with stop at %.2f", lots,price,stop);
+         int openPos = countOpenPositions(myMagic);
+         
+          if (lots == 0) {
+            if (openPos < 3) {
+               lots = lotsByRisk(initialStop,riskInPercent,lotDigits);
+            } else {
+               double securedProfit = securedProfit(myMagic);
+               if (AccountEquity()*riskInPercent > 0.5*securedProfit) {
+                  PrintFormat("Skipping signal, (half of) locked in profit %.2f is less than %i percent of equity (%.2f): %.2f",securedProfit,riskInPercent,AccountEquity(),(riskInPercent*AccountEquity()));
+               } else {
+                  double riskInPercentByProfit = (0.5*securedProfit) / AccountEquity();
+                  lots = lotsByRisk(initialStop,riskInPercentByProfit,lotDigits);
+                  if (trace) 
+                     PrintFormat("Trading signal, (half of) locked in profit %.2f is more than %i percent of equity (%.2f): %.2f",securedProfit,riskInPercent,AccountEquity(),(riskInPercent*AccountEquity()));
+               }
+            }  
          }
-         OrderSend(Symbol(),OP_SELL,lots,price,3,stop,0,"simple MA RSI",myMagic,0,clrRed);      
+         
+         if (lots>0) {
+            if (trace) {
+               PrintFormat("selling %.2f lots at %.2f with stop at %.2f", lots,price,stop);
+            }
+            OrderSend(Symbol(),OP_SELL,lots,price,3,stop,0,"simple MA RSI",myMagic,0,clrRed);      
+        }
       }
    }
    

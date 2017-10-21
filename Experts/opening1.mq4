@@ -130,7 +130,7 @@ void OnTick()
             }
             OrderSend(Symbol(),OP_BUYLIMIT, lots, price ,3,stop,tp,NULL,myMagic,0,clrGreen);
             stop = NormalizeDouble(openHigh + buffer,lotDigits);
-            price = NormalizeDouble(openHigh-rangeDistance*amplitude,lotDigits);
+            price = NormalizeDouble(openHigh-tance*amplitude,lotDigits);
             tp = NormalizeDouble(openLow,lotDigits);
             if (takeProfit != 0.0) { tp = price-takeProfit;}
             if (debug) {

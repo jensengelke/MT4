@@ -129,8 +129,9 @@ void OnTick()
             OrderSend(Symbol(),OP_BUY,lots,Ask,3,stop,tp,"ruhige Kugel long",myMagic,0,clrGreen);
          }
       }   
+   } else {
+      //closeAllOpenOrders(myMagic);
    }
-      
   }
 //+------------------------------------------------------------------+
 //| Timer function                                                   |
