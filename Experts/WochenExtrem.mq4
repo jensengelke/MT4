@@ -13,6 +13,8 @@ extern int myMagic = 201700826;
 extern double risk = 1.0;
 extern int fixedLots = 0.0;
 extern bool trace = true;
+extern bool wochenSignale = true;
+extern bool tagesSignale = false;
 
 extern double initialStop = 20.0;
 extern double takeProfit = 20.0;
@@ -87,30 +89,30 @@ void OnTick()
       double tagesHoch = iHigh(Symbol(),PERIOD_D1,0);
       double tagesTief = iLow(Symbol(),PERIOD_D1,0);
       
-      if (Low[2] < vorwochenHoch && Close[1] > (vorwochenHoch + buffer)) 
+      if (wochenSignale && Low[2] < vorwochenHoch && Close[1] > (vorwochenHoch + buffer)) 
          buy();      
       
-      if (High[2] > vorwochenTief && Close[1] < (vorwochenTief - buffer)) 
+      if (wochenSignale && High[2] > vorwochenTief && Close[1] < (vorwochenTief - buffer)) 
          sell();   
          
          
-      if (Low[2] < wochenHoch && Close[1] > (wochenHoch + buffer)) 
+      if (wochenSignale && Low[2] < wochenHoch && Close[1] > (wochenHoch + buffer)) 
          buy();      
               
-      if (High[2] > wochenTief && Close[1] < (wochenTief - buffer)) 
+      if (wochenSignale && High[2] > wochenTief && Close[1] < (wochenTief - buffer)) 
          sell();  
          
-      if (Low[2] < vortagesHoch && Close[1] > (vortagesHoch + buffer)) 
+      if (tagesSignale && Low[2] < vortagesHoch && Close[1] > (vortagesHoch + buffer)) 
          buy();      
       
-      if (High[2] > vortagesTief && Close[1] < (vortagesTief - buffer)) 
+      if (tagesSignale && High[2] > vortagesTief && Close[1] < (vortagesTief - buffer)) 
          sell();   
          
          
-      if (Low[2] < tagesHoch && Close[1] > (tagesHoch + buffer)) 
+      if (tagesSignale && Low[2] < tagesHoch && Close[1] > (tagesHoch + buffer)) 
          buy();      
               
-      if (High[2] > tagesTief && Close[1] < (tagesTief - buffer)) 
+      if (tagesSignale && High[2] > tagesTief && Close[1] < (tagesTief - buffer)) 
          sell();   
    }
    
