@@ -17,9 +17,11 @@ extern bool wochenSignale = true;
 extern bool tagesSignale = false;
 
 extern double initialStop = 20.0;
+extern double initialStopInPercent = 0.5;
 extern double takeProfit = 20.0;
 extern double stopAufEinstand = 10.0;
 extern double trailInProfit = 15.0;
+extern double trailInPercent = 0.5;
 
 extern double buffer = 10.0;
 
@@ -74,6 +76,9 @@ void OnTick()
    
    if (currentDirectionOfOpenPositions(myMagic)!=0) {   
       stopAufEinstand(myMagic,stopAufEinstand);
+      if (trailInPercent > 0) {
+         trailInProfit = MathAbs(Bid*(trailInPercent/100));
+      }
       trailInProfit(myMagic,trailInProfit);
    } 
    if (currentRisk(myMagic)<=0.0){
@@ -133,8 +138,12 @@ void buy() {
       double lots = fixedLots;
       
       double stop = Ask - initialStop;
-      if (0 == initialStop) 
+      if (initialStopInPercent>0) {
+         stop = Ask * (1-(initialStopInPercent/100));
+      }
+      if (0 == initialStop && initialStopInPercent == 0) 
          stop = iLow(Symbol(),PERIOD_H1,1);
+         
       if (lots == 0) 
          lots = lotsByRisk(Ask-stop,risk,lotDigits);
          
@@ -151,7 +160,10 @@ void sell() {
       double lots = fixedLots;
             
       double stop = Bid + initialStop;
-      if (0 == initialStop) 
+      if (initialStopInPercent > 0) 
+         stop = Bid * (1+(initialStopInPercent/100));
+        
+      if (0 == initialStop && 0 == initialStopInPercent) 
          stop = iHigh(Symbol(),PERIOD_H1,1);
       if (lots == 0) 
          lots = lotsByRisk(stop-Bid,risk,lotDigits);
