@@ -105,16 +105,15 @@ void OnTick()
       PrintFormat("sar=%.2f,rsi=%.2f,rsiPrev=%.2f, close0=%.2f,close1=%.2f",sar,rsi,rsiPrev,Close[0],Close[1]);
    }
    
-   if (smaFilter &&
-      openOrders < maxPos &&
-      countOpenPendingOrders(myMagic) == 0 &&
-      currentRisk(myMagic)<=0 &&
-      currentDirectionOfOpenPositions(myMagic) >=0 &&
-      rsi > rsiPrev &&
-      rsiPrev < rsiLow &&
-      sma > smaShift &&
-      Close[0] > sar 
-      
+   if (smaFilter &&                                      //minimum volatility
+      openOrders < maxPos &&                             //positions
+      countOpenPendingOrders(myMagic) == 0 &&            //positions
+      rsi > rsiPrev &&                                   //indicator normalizes
+      rsiPrev < rsiLow &&                                //indicator threshold      
+      sma > smaShift &&                                  //trend direction
+      Close[0] > sar &&                                  //trend direction
+      currentRisk(myMagic)<=0 &&                         //cumulate orders one at a time
+      currentDirectionOfOpenPositions(myMagic) >=0       //stick in one direction
    ) {
       if (Close[0] < Close[1]) {
          double price = MathMax((Close[0]+buffer), (Close[1]+buffer));
@@ -150,15 +149,15 @@ void OnTick()
    }
    
    if (
-      smaFilter &&
-      openOrders < maxPos &&
-      countOpenPendingOrders(myMagic) == 0 &&
-      rsi < rsiPrev &&
-      rsiPrev > rsiHigh &&
-      Close[0] < sar &&
-      currentRisk(myMagic)<=0 &&
-      sma < smaShift &&
-      currentDirectionOfOpenPositions(myMagic) <=0 
+      smaFilter &&                                 //minimum volatility
+      openOrders < maxPos &&                       //positions
+      countOpenPendingOrders(myMagic) == 0 &&      //positions
+      rsi < rsiPrev &&                             //indicator normalizes
+      rsiPrev > rsiHigh &&                         //indicator threshold
+      Close[0] < sar &&                            //trend direction
+      sma < smaShift &&                            //trend direction
+      currentRisk(myMagic)<=0 &&                   //cumulate orders one at a time      
+      currentDirectionOfOpenPositions(myMagic) <=0 //stick in one direction
    ) {
       if (Close[0] > Close[1]) {
          double price = MathMin((Close[0]-buffer), (Close[1]-buffer));
