@@ -88,10 +88,25 @@ void OnTick()
    double rsi = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,0);
    double rsiPrev = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,1);
    
-   double sma = iMA(Symbol(),PERIOD_CURRENT,smaFilterPeriod,0,MODE_SMA,PRICE_CLOSE,0);
-   double smaShift = iMA(Symbol(),PERIOD_CURRENT,smaFilterPeriod,0,MODE_SMA,PRICE_CLOSE,smaFilterLookback);
+   //double sma = iMA(Symbol(),PERIOD_CURRENT,smaFilterPeriod,0,MODE_SMA,PRICE_CLOSE,0);
+   //double smaShift = iMA(Symbol(),PERIOD_CURRENT,smaFilterPeriod,0,MODE_SMA,PRICE_CLOSE,smaFilterLookback);
    
-   bool smaFilter = MathAbs(sma-smaShift) > smaFilterMinMove;
+   double highestSMA = 0.0;
+   double lowestSMA = 0.0;
+   
+   if (smaFilterPeriod>0) {
+      for (int i = 0; i<smaFilterLookback;i++) {
+         double smaAtIndex = iMA(Symbol(),PERIOD_CURRENT,smaFilterPeriod,0,MODE_SMA,PRICE_CLOSE,i);
+         
+         if (highestSMA == 0.0 || highestSMA < smaAtIndex) 
+            highestSMA = smaAtIndex;
+         if (lowestSMA == 0.0 || lowestSMA > smaAtIndex)
+            lowestSMA = smaAtIndex;
+      }
+   }
+      
+   //bool smaFilter = MathAbs(sma-smaShift) > smaFilterMinMove;
+   bool smaFilter = MathAbs(highestSMA-lowestSMA) > smaFilterMinMove;
    if (smaFilterPeriod == 0) 
       smaFilter = true;
    
@@ -110,7 +125,6 @@ void OnTick()
       countOpenPendingOrders(myMagic) == 0 &&            //positions
       rsi > rsiPrev &&                                   //indicator normalizes
       rsiPrev < rsiLow &&                                //indicator threshold      
-      sma > smaShift &&                                  //trend direction
       Close[0] > sar &&                                  //trend direction
       currentRisk(myMagic)<=0 &&                         //cumulate orders one at a time
       currentDirectionOfOpenPositions(myMagic) >=0       //stick in one direction
@@ -155,7 +169,6 @@ void OnTick()
       rsi < rsiPrev &&                             //indicator normalizes
       rsiPrev > rsiHigh &&                         //indicator threshold
       Close[0] < sar &&                            //trend direction
-      sma < smaShift &&                            //trend direction
       currentRisk(myMagic)<=0 &&                   //cumulate orders one at a time      
       currentDirectionOfOpenPositions(myMagic) <=0 //stick in one direction
    ) {
