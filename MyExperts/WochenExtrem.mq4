@@ -7,7 +7,7 @@
 #property link      "https://www.mql5.com"
 #property version   "1.00"
 #property strict
-#include "../Include/JensUtils.mqh";
+#include "../../Include/MyInclude/JensUtils.mqh";
 extern int myMagic = 201700826;
 
 extern double risk = 1.0;

@@ -7,7 +7,7 @@
 #property link      "https://www.mql5.com"
 #property version   "1.00"
 #property strict
-#include "../Include/JensUtils.mqh";
+#include "../../Include/MyInclude/JensUtils.mqh";
 extern int myMagic = 20171126;
 
 extern double risk = 1.0;
@@ -15,7 +15,7 @@ extern int fixedLots = 0.0;
 extern bool trace = true;
 
 extern double initialStop = 20.0;
-extern double takeProfit = 20.0;
+extern double takeProfit = 30.0;
 
 static datetime lastTradeTime = NULL;
 static int symbolDigits = -1;
@@ -55,12 +55,12 @@ void OnTick()
 //---
    if(DayOfWeek()==0 || DayOfWeek()==6) return;
  
-   if (Time[0] == lastTradeTime) {
-      return;
-   }
-   lastTradeTime = Time[0];
+  // if (Time[0] == lastTradeTime) {
+  //    return;
+ //  }
+ //  lastTradeTime = Time[0];
    
-   if (TimeHour(TimeLocal())==17 && TimeMinute(TimeLocal())==45) {
+   if (TimeHour(TimeLocal())==09 && TimeMinute(TimeLocal())==00 && currentDirectionOfOpenPositions(myMagic)==0) {
       double lots = fixedLots;
       if (fixedLots == 0.0) {
          lots = lotsByRisk(initialStop,risk,lotDigits);
@@ -70,7 +70,7 @@ void OnTick()
       OrderSend(Symbol(),OP_BUY,lots,Ask,3,stop,tp,"evening strength",myMagic,0,clrGreen);
    }
    
-   if (TimeHour(TimeLocal()) == 21 && TimeMinute(TimeLocal())==45) {
+   if (TimeHour(TimeLocal()) == 15 && TimeMinute(TimeLocal())==15) {
       closeLongPositions(myMagic);
    }
    
