@@ -16,11 +16,14 @@ extern int tracelevel = 0;
 
 extern double buyImmediatelyBuffer = 15.0;
 
+extern bool macdFilter = false;
+
 extern int strengthPeriod1 = 52;
 extern ENUM_TIMEFRAMES entryTimeFrame1 = PERIOD_W1;
 extern ENUM_TIMEFRAMES exitTimeFrame1 = PERIOD_D1;
 extern int initialStop1 = 1;
 extern int trailingStop1 = 2;
+extern double trailByAtrFactor = 4.0;
 extern double minStop1 = 35.0;
 extern double maxStop1 = 200.0;
 
@@ -66,12 +69,24 @@ void OnTick()
    lastTradeTime = Time[0];
    
    closeAllPendingOrders(myMagic);
-   trailWithLastXCandle(myMagic,trailingStop1,exitTimeFrame1);
+   if (trailByAtrFactor > 0.0) {
+      trailByATR(myMagic,strengthPeriod1, PERIOD_CURRENT, trailByAtrFactor);
+   } else {
+      trailWithLastXCandle(myMagic,trailingStop1,exitTimeFrame1);
+   }
    
+   int highest = iHighest(Symbol(),entryTimeFrame1,MODE_HIGH,strengthPeriod1,0);
+   
+   double high1 = iHigh(Symbol(),entryTimeFrame1,highest);
+   double stop1 = Low[iLowest(Symbol(),exitTimeFrame1,MODE_LOW, initialStop1,0)];
+   
+   Comment("high1: ", high1, "   stop1: ",stop1, "   highest: ", highest);
+      
    //create new 
    if (currentRisk(myMagic)<=0) { //consider open risk?
-      double high1 = High[iHighest(Symbol(),entryTimeFrame1,MODE_HIGH,strengthPeriod1,0)];
-      double stop1 = Low[iLowest(Symbol(),exitTimeFrame1,MODE_LOW, initialStop1,0)];
+      if (macdFilter && iMACD(Symbol(),PERIOD_CURRENT,12,26,9,PRICE_CLOSE,MODE_SIGNAL,0) <0) return;
+   
+      
       
       if ((high1-stop1)<minStop1) stop1=high1-minStop1;
       if ((high1-stop1)>maxStop1) stop1=high1-maxStop1;
