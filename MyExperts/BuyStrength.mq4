@@ -24,6 +24,7 @@ extern ENUM_TIMEFRAMES exitTimeFrame1 = PERIOD_D1;
 extern int initialStop1 = 1;
 extern int trailingStop1 = 2;
 extern double trailByAtrFactor = 4.0;
+extern int trailByATRPeriod = 12;
 extern double minStop1 = 35.0;
 extern double maxStop1 = 200.0;
 
@@ -70,17 +71,18 @@ void OnTick()
    
    closeAllPendingOrders(myMagic);
    if (trailByAtrFactor > 0.0) {
-      trailByATR(myMagic,strengthPeriod1, PERIOD_CURRENT, trailByAtrFactor);
+      trailByATR(myMagic,trailByATRPeriod, PERIOD_CURRENT, trailByAtrFactor);
    } else {
       trailWithLastXCandle(myMagic,trailingStop1,exitTimeFrame1);
    }
    
    int highest = iHighest(Symbol(),entryTimeFrame1,MODE_HIGH,strengthPeriod1,0);
+   int lowest = iLowest(Symbol(),exitTimeFrame1,MODE_LOW,initialStop1,0);
    
    double high1 = iHigh(Symbol(),entryTimeFrame1,highest);
-   double stop1 = Low[iLowest(Symbol(),exitTimeFrame1,MODE_LOW, initialStop1,0)];
+   double stop1 = iLow(Symbol(),exitTimeFrame1, lowest);
    
-   Comment("high1: ", high1, "   stop1: ",stop1, "   highest: ", highest);
+   Comment("high1: ", high1, "   highest: ", highest, "   stop1: ",stop1 );
       
    //create new 
    if (currentRisk(myMagic)<=0) { //consider open risk?
