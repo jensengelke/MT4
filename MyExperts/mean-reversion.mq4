@@ -97,7 +97,7 @@ void OnTick()
       stopLong = NormalizeDouble(stopLong,5);
      
       if (bollingerUpper > Bid - immediateBuffer) { //stopsell               
-         if (countOpenPendingOrders(myMagic)==0){ // new order
+         if (countOpenPendingShortOrders(myMagic)==0){ // new order
             sellLimit(lots,bollingerUpper,stopShort,bollingerLower);
          } else {
             updateSelllimt(bollingerUpper,stopShort,bollingerLower);
@@ -108,7 +108,7 @@ void OnTick()
       }
       //TODO: BUYSIDE
       if (bollingerLower < Ask + immediateBuffer) {
-         if (countOpenPendingOrders(myMagic)==0){ // new order
+         if (countOpenPendingLongOrders(myMagic)==0){ // new order
             buyLimit(lots,bollingerLower,stopLong,bollingerUpper);
          } else {
             updateBuylimit(bollingerLower,stopLong, bollingerUpper);
