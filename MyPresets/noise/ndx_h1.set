@@ -1,0 +1,9 @@
+myMagic=201803181
+tracelevel=0
+ext_atrPeriod=8
+ext_minATR=30.0
+ext_bodySize=0.4
+ext_atrFactorProfit=0.7
+ext_atrFactorStop=2.3
+lots=0.3
+ext_closeToExtreme=0.25

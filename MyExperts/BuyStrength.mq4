@@ -24,6 +24,7 @@ extern double minStop1 = 0.0;
 extern double minStop1InPercent = 35.0;
 extern double maxStop1 = 0.0;
 extern double maxStop1InPercent = 200.0;
+extern double takeProfit = 50.0;
 
 static datetime lastTradeTime = NULL;
 static int lotDigits = -1;
@@ -108,15 +109,21 @@ void OnTick()
          }
       }
       
+      
+      
       if (tracelevel > 0) 
          PrintFormat("buying strength at high=%.2f with stop at %.2f, Ask=%.2f",high1,stop1, Ask);
       
       if ((Ask) > high1) {
          double lots = lotsByRisk((Ask-stop1),risk,lotDigits);
+         double tp = 0;
+         if (takeProfit > 0.0) {
+            tp = Ask + takeProfit;
+         }
          if (tracelevel > 0) 
             PrintFormat("buying %.2f lots immediately at Ask=%.2f",lots,Ask);
          closeAllPendingLongOrders(myMagic);
-         OrderSend(Symbol(),OP_BUY,lots,Ask,3,stop1,0,"Buy stregnth",myMagic,0,clrGreen);
+         OrderSend(Symbol(),OP_BUY,lots,Ask,3,stop1,tp,"Buy stregnth",myMagic,0,clrGreen);
       } else {
          double lots = lotsByRisk((high1-stop1),risk,lotDigits);
          if (tracelevel > 0) 
@@ -135,7 +142,11 @@ void OnTick()
          
          if (!orderExists) {
                closeAllPendingLongOrders(myMagic);
-               OrderSend(Symbol(),OP_BUYSTOP,lots,high1,5.0,stop1,0,"Buy strength",myMagic,0,clrGreen);
+               double tp = 0.0;
+                if (takeProfit > 0.0) {
+                    tp = high1 + takeProfit;
+                }
+               OrderSend(Symbol(),OP_BUYSTOP,lots,high1,5.0,stop1,tp,"Buy strength",myMagic,0,clrGreen);
          }         
       }
    }
@@ -181,10 +192,14 @@ void OnTick()
       
       if ((Bid) < short_low1) {
          double lots = lotsByRisk((stop1-Bid),risk,lotDigits);
+         double tp = 0;
+         if (takeProfit > 0.0) {
+            tp = Bid - takeProfit;
+         }
          if (tracelevel > 0) 
             PrintFormat("selling %.2f lots immediately at Bid=%.2f",lots,Bid);
          closeAllPendingShortOrders(myMagic);
-         OrderSend(Symbol(),OP_SELL,lots,Bid,3,stop1,0,"Sell weakness",myMagic,0,clrGreen);
+         OrderSend(Symbol(),OP_SELL,lots,Bid,3,stop1,tp,"Sell weakness",myMagic,0,clrGreen);
       } else {
          double lots = lotsByRisk((stop1-short_low1),risk,lotDigits);
          if (tracelevel > 0) 
@@ -203,7 +218,11 @@ void OnTick()
          
          if (!orderExists) {
                closeAllPendingShortOrders(myMagic);
-               OrderSend(Symbol(),OP_SELLSTOP,lots,short_low1,5.0,stop1,0,"Sell weakness",myMagic,0,clrGreen);
+               double tp = 0;
+               if (takeProfit > 0.0) {
+                 tp = short_low1 - takeProfit;
+               }
+               OrderSend(Symbol(),OP_SELLSTOP,lots,short_low1,5.0,stop1,tp,"Sell weakness",myMagic,0,clrGreen);
          }         
       }
    }

@@ -72,7 +72,7 @@ void OnTick()
    if (tracelevel > 1) {
       PrintFormat("momentum Distance %5f", currentMom);
    }
-   if (momentumDistance > currentMom) {
+   if (momentumDistance < currentMom) {
       closeAllPendingOrders(myMagic);
       return;
    }
@@ -95,6 +95,8 @@ void OnTick()
       
       stopShort = NormalizeDouble(stopShort,5);
       stopLong = NormalizeDouble(stopLong,5);
+      
+      PrintFormat("Bid: %.5f, stopShort: %.5f, Ask: %.5f, stopLong: %.5f",Bid,stopShort,Ask,stopLong);
      
       if (bollingerUpper > Bid - immediateBuffer) { //stopsell               
          if (countOpenPendingShortOrders(myMagic)==0){ // new order
