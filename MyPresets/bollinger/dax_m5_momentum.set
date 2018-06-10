@@ -1,0 +1,13 @@
+myMagic=20180605
+tracelevel=0
+period=60
+bbStdDev=2.70000000
+stopBuffer=2.00000000
+targetFix=22.00000000
+targetStdDev=0.00000000
+risk=2.00000000
+maxStdDev=50.00000000
+exit=2
+fixLots=1.00000000
+maxStop=45.00000000
+chartLabel=Momentum

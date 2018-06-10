@@ -1,0 +1,13 @@
+myMagic=201806051
+tracelevel=0
+period=60
+bbStdDev=1.0
+stopBuffer=2.0
+targetFix=10.0
+targetStdDev=5.0
+risk=1.0
+maxStdDev=50.0
+exit=2
+fixLots=0.0
+maxStop=200.0
+chartLabel=plain
