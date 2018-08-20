@@ -20,7 +20,8 @@ extern int exit=2; //exit: 1-middle, 2 opposite bb
 extern double lots = 1.0;
 extern double maxStop = 20.0;
 extern string chartLabel = "";
-
+extern int startHour =9; //start at Server time
+extern int closeHour = 22; //close at Server time + 45 min
 static datetime lastTradeTime = NULL;
 
 //+------------------------------------------------------------------+
@@ -30,6 +31,7 @@ int OnInit()
   {
 //---
    Comment(chartLabel);
+   
 //---
    return(INIT_SUCCEEDED);
   }
@@ -48,15 +50,14 @@ void OnTick()
   {
 
    if (Time[0] ==lastTradeTime) return;
-   lastTradeTime = Time[0];   
-
+   
    datetime now = TimeCurrent();
 
-   if (TimeHour(now)>=21 && TimeMinute(now)>=45) {
+   if (TimeHour(now)>=closeHour && TimeMinute(now)>=45) {
       closeAllOpenOrders(myMagic);
       closeAllPendingOrders(myMagic);
       return;
-   } else if (TimeHour(now)>=8) {
+   } else if (TimeHour(now)>=startHour) {
       double stddev = iStdDev(Symbol(),PERIOD_CURRENT,period,0,MODE_SMA,PRICE_TYPICAL,0);
       double bbUpper = NormalizeDouble(iBands(Symbol(),PERIOD_CURRENT,period,bbStdDev,0,PRICE_TYPICAL,MODE_UPPER,0),Digits());
       double bbLower = NormalizeDouble(iBands(Symbol(),PERIOD_CURRENT,period,bbStdDev,0,PRICE_TYPICAL,MODE_LOWER,0),Digits());
@@ -114,7 +115,9 @@ void OnTick()
          double tp = NormalizeDouble(bbLower-target,Digits());
          OrderSend(Symbol(),OP_SELLSTOP,lots,bbLower,5,stop,tp,"bollinger - " + chartLabel,myMagic,0,clrRed);
      }
-   
+     lastTradeTime = Time[0];   
    }
+   
+   
   }
 //+------------------------------------------------------------------+

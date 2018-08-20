@@ -9,7 +9,7 @@
 #property strict
 
 #include "../../Include/MyInclude/JensUtils.mqh";
-extern int myMagic = 20180605;
+extern int myMagic = 20180630;
 
 extern int tracelevel = 2;
 extern int period = 16;
@@ -18,7 +18,7 @@ extern double stopBuffer = 0.0;
 extern double targetFix = 10.0;
 extern double targetStdDev = 1.0;
 extern double risk = 2.0;
-extern double maxStdDev = 20.0;
+extern double maxStdDev = 50.0;
 extern int exit=1; //exit: 1-middle, 2 opposite bb 
 extern double fixLots = 1.0;
 extern double maxStop = 20.0;
@@ -61,6 +61,7 @@ void OnTick()
    if ((TimeHour(now)>=21 && TimeMinute(now)>=45) ||
       (MathAbs(Bid-Ask)>maxSpread) ) {
       closeAllOpenOrders(myMagic);
+      closeAllPendingOrders(myMagic);
       return;
    } else if (TimeHour(now)>8) {
       double stddev = iStdDev(Symbol(),PERIOD_CURRENT,period,0,MODE_SMA,PRICE_TYPICAL,0);
@@ -73,41 +74,71 @@ void OnTick()
       } else if (exit==2) {   
          trail(myMagic,bbUpper,bbLower,false);      
       }
-      closeAllPendingOrders(myMagic);
-         
-      if (stddev < maxStdDev) {   
+      int pendingLongTicket = -1;
+      int pendingShortTicket = -1;
       
-         double target = targetFix;
-         if (targetStdDev!=0.0) {
-            target = targetStdDev * stddev;
-         }
-         if (countOpenLongPositions(myMagic)==0 || currentRisk(myMagic) <= 0.0) {
-            double lots=fixLots;
-            
-            if (lots == 0.0) {
-               lots=lotsByRisk(bbUpper-bbMain+stopBuffer,risk,lotDigits);
-            }
-            double tp = NormalizeDouble(bbUpper+target,Digits());   
-            double stop = bbMain-stopBuffer;
-            if (bbUpper - stop > maxStop) {
-               stop = bbUpper - maxStop;
-            }
-            OrderSend(Symbol(),OP_BUYSTOP,lots,bbUpper,5,stop,tp,"bolinger",myMagic,0,clrGreen);
-         }
-        
-         if (countOpenShortPositions(myMagic) == 0 || currentRisk(myMagic) <= 0.0) {
-            double lots = fixLots;
-            if (lots == 0) {
-               lots = lotsByRisk((bbMain+stopBuffer)-bbLower,risk,lotDigits);
-            }
-            double stop = bbMain+stopBuffer;
-            if (stop - bbLower > maxStop) {
-               stop = bbLower + maxStop;
-            }
-            double tp = NormalizeDouble(bbLower-target,Digits());
-            OrderSend(Symbol(),OP_SELLSTOP,lots,bbLower,5,stop,tp,"bollinger",myMagic,0,clrRed);
-        }
+      double target = targetFix;
+      if (targetStdDev!=0.0) {
+         target = targetStdDev * stddev;
       }
+      
+      //long params
+      double tpLong = NormalizeDouble(bbUpper+target,Digits());   
+      double stopLong = bbMain-stopBuffer;
+      if ((bbUpper - stopLong) > maxStop) {
+         stopLong = bbUpper - maxStop;
+      }
+      double lotsLong=fixLots;     
+      if (lotsLong == 0.0) {
+         lotsLong=lotsByRisk(bbUpper-stopLong,risk,lotDigits);
+      }
+      
+      //short params
+      double stopShort = bbMain+stopBuffer;
+      if ((stopShort - bbLower) > maxStop) {
+         stopShort = bbLower + maxStop;
+      }
+      double tpShort = NormalizeDouble(bbLower-target,Digits());
+      
+      double lotsShort=fixLots;     
+      if (lotsShort == 0.0) {
+         lotsShort=lotsByRisk(stopShort-bbLower,risk,lotDigits);
+      }
+      
+      for (int i=OrdersTotal();i>=0;i--) {
+         OrderSelect(i,SELECT_BY_POS,MODE_TRADES);
+         if (OrderMagicNumber() != myMagic) continue;
+         if (OrderSymbol() != Symbol()) continue;
+         if (OrderType() == OP_BUYSTOP) {
+            pendingLongTicket = OrderTicket();
+            if (lotsLong == OrderLots()) {
+               OrderModify(pendingLongTicket,bbUpper,stopLong,tpLong,0,clrGreen);
+            } else {
+               OrderDelete(pendingLongTicket);
+               pendingLongTicket = OrderSend(Symbol(),OP_BUYSTOP,lotsLong,bbUpper,5,stopLong,tpLong,"bollinger - " + chartLabel,myMagic,0,clrGreen);
+            }
+         }
+         if (OrderType() == OP_SELLSTOP) {
+            pendingShortTicket = OrderTicket();
+            
+            if (lotsShort == OrderLots()) {
+               OrderModify(pendingShortTicket,bbLower,stopShort,tpShort,0,clrRed);
+            } else {
+               OrderDelete(pendingShortTicket);
+               pendingShortTicket =OrderSend(Symbol(),OP_SELLSTOP,lotsShort,bbLower,5,stopShort,tpShort,"bollinger - " + chartLabel,myMagic,0,clrRed);
+            }
+         }
+      }
+      
+      
+      if (pendingLongTicket==-1 && currentRisk(myMagic) <= 0.0) {
+         OrderSend(Symbol(),OP_BUYSTOP,lotsLong,bbUpper,5,stopLong,tpLong,"bollinger - " + chartLabel,myMagic,0,clrGreen);
+      } 
+     
+      if (pendingShortTicket==-1 && currentRisk(myMagic) <= 0.0) {
+         OrderSend(Symbol(),OP_SELLSTOP,lotsShort,bbLower,5,stopShort,tpShort,"bollinger - " + chartLabel,myMagic,0,clrRed);
+     }
+     lastTradeTime = Time[0];   
    }
   }
 //+------------------------------------------------------------------+

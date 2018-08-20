@@ -1,0 +1,12 @@
+myMagic=201806051
+tracelevel=0
+period=60
+bbStdDev=2.2
+stopBuffer=-2.0
+target=20
+exit=2
+lots=1.0
+maxStop=25.0
+chartLabel=rare
+startHour=9
+closeHour=22
