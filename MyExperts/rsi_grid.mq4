@@ -76,8 +76,12 @@ void OnTick()
    
    lastTradeTime = Time[0];
    
-   double rsi = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,0);
-   double rsiPrev = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,1);
+   double rsi = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,1);
+   double rsiPrev = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,2);
+   
+   if (tracelevel>=2) {
+      PrintFormat("RSI[1]=%.2f, RSI[2]=%.2f",rsi,rsiPrev);
+   }
    
    if (rsiPrev > rsiHighThreshold && rsi < rsiHighThreshold) {
       //short signal
@@ -99,7 +103,9 @@ void OnTick()
 
 
 int sell() {
-
+   if (tracelevel>=2) {
+      PrintFormat("ENTRY sell()");
+   }
    double entry = NormalizeDouble(Bid, _Digits);
    int ticket = -1;
    
@@ -134,7 +140,7 @@ int sell() {
    
    if (highestEntry > 0.0) {
       double martingaleDistance = (entry -highestEntry)/_Point;
-      if ( martingaleDistance < martingaleMinDistance) {
+      if (martingaleDistance < martingaleMinDistance) {
          if (tracelevel>=1) {
             PrintFormat("SKIPPING SELL signal: current price is %.2f (less than martingaleMinDistance: %.2f) points away from highest entry", martingaleDistance, martingaleMinDistance);
          }
@@ -148,7 +154,9 @@ int sell() {
    }
    
    double totalSize = currentSizeOfOpenPositions + size;
-   double totalTarget = pointsToRecover + (tpPoints*lots/size);
+   double spread = (Ask-Bid)/_Point;
+   double totalTarget = pointsToRecover + (tpPoints*lots/size) + (spread*currentCountOfOpenPositions);
+   PrintFormat("spread=%.2f, totalTarget=%.2f, currentCountOfOpenPositions=%i",spread,totalTarget,currentCountOfOpenPositions);
    double thisTpPoints = totalTarget * lots/totalSize; 
    double tp = entry - (thisTpPoints*_Point);
      
@@ -167,6 +175,9 @@ int sell() {
 }
 
 int buy() {
+   if (tracelevel>=2) {
+      PrintFormat("ENTRY buy()");
+   }
    double entry = NormalizeDouble(Ask, _Digits);
    int ticket = -1;
    
@@ -201,7 +212,7 @@ int buy() {
    
    if (lowestEntry > 0.0) {
       double martingaleDistance = (lowestEntry - entry)/_Point;
-      if ( martingaleDistance < martingaleMinDistance) {
+      if (martingaleDistance < martingaleMinDistance) {
          if (tracelevel>=1) {
             PrintFormat("SKIPPING BUY signal: current price is %.2f (less than martingaleMinDistance: %.2f) points away from highest entry", martingaleDistance, martingaleMinDistance);
          }
