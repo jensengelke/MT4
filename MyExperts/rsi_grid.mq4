@@ -22,14 +22,17 @@ input double rsiHighThreshold = 85;
 
 input string label2 = ""; //+--- money management ---+
 input double lots = 0.01;
+input double maxLots = 3.00;
 input double tpPoints = 400;
 input double martingaleFactor = 3.0;
 input double martingaleMinDistance = 100;
+input double increaseSizeEvery = 1500.0;
 
 CArrayInt longTickets;
 CArrayInt shortTickets;
 
-
+static double currentLots = lots;
+static double currentMaxLots = maxLots;
 static datetime lastTradeTime = NULL;
 
 //+------------------------------------------------------------------+
@@ -43,7 +46,11 @@ int OnInit()
    longTickets.Clear();
    shortTickets.Clear();
    for (int i=OrdersTotal(); i>=0; i--) {
-      if (OrderSelect(i, SELECT_BY_POS) && OrderMagicNumber() == myMagic && OrderSymbol() == _Symbol) {
+      if (OrderSelect(i, SELECT_BY_POS) && OrderMagicNumber() == myMagic) {
+         if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
+            PrintFormat("MagicNumber already in use!");          
+            return INIT_FAILED;
+         }
          if (OrderType() == OP_BUY) {
             longTickets.Add(OrderTicket());
          } else if ( OrderType() == OP_SELL) {
@@ -76,6 +83,13 @@ void OnTick()
    
    lastTradeTime = Time[0];
    
+   currentLots = NormalizeDouble(AccountEquity() / increaseSizeEvery * lots,_Digits);
+   if (currentLots<lots) currentLots = lots;
+   currentMaxLots = NormalizeDouble(AccountEquity() / increaseSizeEvery * maxLots,_Digits);
+   if (currentMaxLots < maxLots) currentMaxLots = maxLots;
+   
+   if (tracelevel>=2) PrintFormat("lots=%.2f,maxlots=%.2f",currentLots,currentMaxLots);
+   
    double rsi = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,1);
    double rsiPrev = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,2);
    
@@ -107,6 +121,7 @@ int sell() {
       PrintFormat("ENTRY sell()");
    }
    double entry = NormalizeDouble(Bid, _Digits);
+   double ask = NormalizeDouble(Ask, _Digits);
    int ticket = -1;
    
    double currentSizeOfOpenPositions = 0.0;
@@ -117,18 +132,24 @@ int sell() {
    
    for (int i=shortTickets.Total(); i>=0; i--) {
       if (OrderSelect(shortTickets.At(i),SELECT_BY_TICKET)) {
+         if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
+            string error = StringFormat("OrderSymbol=%s, Symbol=%",OrderSymbol(),Symbol());
+            Comment("Error: " + error);
+            PrintFormat("Error: " + error);
+            continue;
+         }
          if (OrderCloseTime()!=0) {
             shortTickets.Delete(i);
          } else {
             currentCountOfOpenPositions++;
             currentSizeOfOpenPositions+=OrderLots();
-            pointsToRecover += ((entry-OrderOpenPrice())*(OrderLots()/lots))/_Point;
+            pointsToRecover += ((ask-OrderOpenPrice())*(OrderLots()/currentLots))/_Point;
             if (tracelevel >= 2) {
-               PrintFormat("SELL: thisEntry=%.5f, orderEntry=%.5f, orderSize=%.2f, lots=%.2f, pointsToRecover=%.5f",
+               PrintFormat("SELL: thisEntry=%.5f, orderEntry=%.5f, orderSize=%.2f, currentLots=%.2f, pointsToRecover=%.5f",
                   entry,
                   OrderOpenPrice(),
                   OrderLots(),
-                  lots,
+                  currentLots,
                   pointsToRecover);
             }
          }
@@ -148,23 +169,29 @@ int sell() {
       }
    }
    
-   double size = lots;
+   double size = currentLots;
    if (currentCountOfOpenPositions > 0) {
-      size = MathPow(martingaleFactor,currentCountOfOpenPositions)*lots;
+      size = MathPow(martingaleFactor,currentCountOfOpenPositions)*currentLots;
    }
    
+   
    double totalSize = currentSizeOfOpenPositions + size;
-   double spread = (Ask-Bid)/_Point;
-   double totalTarget = pointsToRecover + (tpPoints*lots/size) + (spread*currentCountOfOpenPositions);
-   PrintFormat("spread=%.2f, totalTarget=%.2f, currentCountOfOpenPositions=%i",spread,totalTarget,currentCountOfOpenPositions);
-   double thisTpPoints = totalTarget * lots/totalSize; 
-   double tp = entry - (thisTpPoints*_Point);
+   if (totalSize > currentMaxLots) size = currentMaxLots - currentSizeOfOpenPositions;
+   double totalTarget = (pointsToRecover + tpPoints)*currentLots/totalSize;
+   double tp = entry - (totalTarget*_Point);
      
-   //PrintFormat("SELL: size=%.5f, totalSize: %.5f, totalTarget = %.5f", size, totalSize, totalTarget);  
-   ticket = OrderSend(Symbol(),OP_SELL,size,entry,1000,0,tp,"rsi-grid",myMagic,0,clrRed);
+   if (size > 0)
+      ticket = OrderSend(Symbol(),OP_SELL,size,entry,1000,0,tp,"rsi-grid",myMagic,0,clrRed);
    if (ticket>0) {
       for (int i=shortTickets.Total(); i>=0; i--) {
+         
          if (OrderSelect(shortTickets.At(i),SELECT_BY_TICKET)) {
+            if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
+               string error = StringFormat("OrderSymbol=%s, Symbol=%",OrderSymbol(),Symbol());
+               Comment("Error: " + error);
+               PrintFormat("Error: " + error);
+               continue;
+            }
             if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
                PrintFormat("ERROR!");
             }
@@ -179,6 +206,7 @@ int buy() {
       PrintFormat("ENTRY buy()");
    }
    double entry = NormalizeDouble(Ask, _Digits);
+   double bid = NormalizeDouble(Bid, _Digits);
    int ticket = -1;
    
    double currentSizeOfOpenPositions = 0.0;
@@ -188,18 +216,24 @@ int buy() {
    
    for (int i=longTickets.Total(); i>=0; i--) {
       if (OrderSelect(longTickets.At(i),SELECT_BY_TICKET)) {
+         if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
+            string error = StringFormat("OrderSymbol=%s, Symbol=%",OrderSymbol(),Symbol());
+            Comment("Error: " + error);
+            PrintFormat("Error: " + error);
+            continue;
+         }
          if (OrderCloseTime()!=0) {
             longTickets.Delete(i);
          } else {
             currentCountOfOpenPositions++;
             currentSizeOfOpenPositions+=OrderLots();
-            pointsToRecover += ((OrderOpenPrice()-entry)*(OrderLots()/lots))/_Point;
+            pointsToRecover += ((OrderOpenPrice()-bid)*(OrderLots()/currentLots))/_Point;
             if (tracelevel >=2) {
-               PrintFormat("BUY: thisEntry=%.5f, orderEntry=%.5f, orderSize=%.2f, lots=%.2f, pointsToRecover=%.5f",
+               PrintFormat("BUY: thisEntry=%.5f, orderEntry=%.5f, orderSize=%.2f, currentLots=%.2f, pointsToRecover=%.5f",
                   entry,
                   OrderOpenPrice(),
                   OrderLots(),
-                  lots,
+                  currentLots,
                   pointsToRecover);
             }
                
@@ -220,23 +254,29 @@ int buy() {
       }
    }
       
-   double size = lots;
+   double size = currentLots;
    if (currentCountOfOpenPositions>0) {
-      size = MathPow(martingaleFactor,currentCountOfOpenPositions)*lots;
+      size = MathPow(martingaleFactor,currentCountOfOpenPositions)*currentLots;
    }
    
-   double totalSize = currentSizeOfOpenPositions + size;
-   double totalTarget = pointsToRecover + (tpPoints*lots/size);
-   double thisTpPoints =totalTarget * lots/totalSize; 
-   double tp = entry + (thisTpPoints*_Point);
-   //PrintFormat("BUY size: %.5f, totalSize: %.5f, totalTarget = %.5f, thisTpPoints=%.2f, tp=%.5f", size, totalSize, totalTarget, thisTpPoints, tp);
    
-   ticket = OrderSend(Symbol(),OP_BUY,size,entry,1000,0,tp,"rsi-grid",myMagic,0,clrGreen);
+   double totalSize = currentSizeOfOpenPositions + size;
+   if (totalSize > currentMaxLots) size = currentMaxLots - currentSizeOfOpenPositions;
+   double totalTarget = (pointsToRecover + tpPoints)*currentLots/totalSize;
+   double tp = entry + (totalTarget*_Point);
+   
+   if (size > 0.0)
+      ticket = OrderSend(Symbol(),OP_BUY,size,entry,1000,0,tp,"rsi-grid",myMagic,0,clrGreen);
    
    if (ticket>0) {
       for (int i=longTickets.Total(); i>=0; i--) {
          if (OrderSelect(longTickets.At(i),SELECT_BY_TICKET)) {
-            if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
+            if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
+               Comment("Two Chart Windows run RSI-Grid EA with the same Magic Number!");
+               PrintFormat("Two Chart Windows run RSI-Grid EA with the same Magic Number!");
+               continue;
+            }
+         if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
                PrintFormat("ERROR!");
             }
          }
