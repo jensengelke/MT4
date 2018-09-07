@@ -176,7 +176,10 @@ int sell() {
    
    
    double totalSize = currentSizeOfOpenPositions + size;
-   if (totalSize > currentMaxLots) size = currentMaxLots - currentSizeOfOpenPositions;
+   if (totalSize > currentMaxLots) {
+      size = currentMaxLots - currentSizeOfOpenPositions;
+      totalSize = currentMaxLots;
+   }
    double totalTarget = (pointsToRecover + tpPoints)*currentLots/totalSize;
    double tp = entry - (totalTarget*_Point);
      
@@ -261,7 +264,10 @@ int buy() {
    
    
    double totalSize = currentSizeOfOpenPositions + size;
-   if (totalSize > currentMaxLots) size = currentMaxLots - currentSizeOfOpenPositions;
+   if (totalSize > currentMaxLots) {
+      size = currentMaxLots - currentSizeOfOpenPositions;
+      totalSize = currentMaxLots;
+   }
    double totalTarget = (pointsToRecover + tpPoints)*currentLots/totalSize;
    double tp = entry + (totalTarget*_Point);
    
