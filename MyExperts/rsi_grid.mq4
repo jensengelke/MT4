@@ -27,6 +27,7 @@ input double tpPoints = 400;
 input double martingaleFactor = 3.0;
 input double martingaleMinDistance = 100;
 input double increaseSizeEvery = 1500.0;
+input double emergencyExit = 0.6;
 
 CArrayInt longTickets;
 CArrayInt shortTickets;
@@ -82,6 +83,21 @@ void OnTick()
    if (Time[0] == lastTradeTime) return;
    
    lastTradeTime = Time[0];
+   
+   if (AccountEquity() / AccountBalance() < emergencyExit) { 
+      Print("Emergency");
+      for (int i=shortTickets.Total(); i>=0; i--) {
+         if (OrderSelect(shortTickets.At(i),SELECT_BY_TICKET)) {
+            OrderClose(OrderTicket(),OrderLots(),Bid,1000,clrRed);
+         }
+      }
+      for (int i=longTickets.Total(); i>=0; i--) {
+         if (OrderSelect(longTickets.At(i),SELECT_BY_TICKET)) {
+            OrderClose(OrderTicket(),OrderLots(),Ask,1000,clrRed);
+         }
+      }
+      
+   }
    
    currentLots = NormalizeDouble(AccountEquity() / increaseSizeEvery * lots,_Digits);
    if (currentLots<lots) currentLots = lots;
@@ -144,6 +160,9 @@ int sell() {
             currentCountOfOpenPositions++;
             currentSizeOfOpenPositions+=OrderLots();
             pointsToRecover += ((ask-OrderOpenPrice())*(OrderLots()/currentLots))/_Point;
+            pointsToRecover += OrderSwap()/MarketInfo(OrderSymbol(),MODE_TICKVALUE);
+            pointsToRecover += OrderCommission()/MarketInfo(OrderSymbol(),MODE_TICKVALUE);
+            
             if (tracelevel >= 2) {
                PrintFormat("SELL: thisEntry=%.5f, orderEntry=%.5f, orderSize=%.2f, currentLots=%.2f, pointsToRecover=%.5f",
                   entry,
@@ -187,7 +206,6 @@ int sell() {
       ticket = OrderSend(Symbol(),OP_SELL,size,entry,1000,0,tp,"rsi-grid",myMagic,0,clrRed);
    if (ticket>0) {
       for (int i=shortTickets.Total(); i>=0; i--) {
-         
          if (OrderSelect(shortTickets.At(i),SELECT_BY_TICKET)) {
             if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
                string error = StringFormat("OrderSymbol=%s, Symbol=%",OrderSymbol(),Symbol());
@@ -195,8 +213,11 @@ int sell() {
                PrintFormat("Error: " + error);
                continue;
             }
-            if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
-               PrintFormat("ERROR!");
+            if (ticket>0) {
+               
+               if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
+                  PrintFormat("ERROR!");
+               }
             }
          }
       }
@@ -231,6 +252,9 @@ int buy() {
             currentCountOfOpenPositions++;
             currentSizeOfOpenPositions+=OrderLots();
             pointsToRecover += ((OrderOpenPrice()-bid)*(OrderLots()/currentLots))/_Point;
+            pointsToRecover += OrderSwap()/MarketInfo(OrderSymbol(),MODE_TICKVALUE);
+            pointsToRecover += OrderCommission()/MarketInfo(OrderSymbol(),MODE_TICKVALUE);
+            
             if (tracelevel >=2) {
                PrintFormat("BUY: thisEntry=%.5f, orderEntry=%.5f, orderSize=%.2f, currentLots=%.2f, pointsToRecover=%.5f",
                   entry,
@@ -282,12 +306,14 @@ int buy() {
                PrintFormat("Two Chart Windows run RSI-Grid EA with the same Magic Number!");
                continue;
             }
-         if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
-               PrintFormat("ERROR!");
+            if (ticket>0) {
+               if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
+                  PrintFormat("ERROR!");
+               }
             }
          }
       }
-   }
+   } 
    
    
    return ticket;

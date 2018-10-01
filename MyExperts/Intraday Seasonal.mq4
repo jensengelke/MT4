@@ -19,9 +19,12 @@ extern int entryHour = 10;
 extern int entryMin = 0;
 extern int exitHour = 14;
 extern int exitMin = 0;
-extern int smaFilterPeriods = 200;
+extern int smaFilterPeriods = 8;
 extern bool counterTrend = true;
+extern int targetPoints = 100;
+extern int stopPoints = 200;
 int smaFilterPeriod = 1;
+extern bool holdOverWeekend = true;
 
 static datetime lastTradeTime = NULL;
 
@@ -32,10 +35,13 @@ static datetime lastTradeTime = NULL;
 int OnInit()
   {
 //---
-   if (exitHour < entryHour) return(INIT_PARAMETERS_INCORRECT);
-   if (exitHour == entryHour && entryMin >= exitMin) return(INIT_PARAMETERS_INCORRECT);
+   //if (exitHour < entryHour) return(INIT_PARAMETERS_INCORRECT);
+   //if (exitHour == entryHour && entryMin >= exitMin) return(INIT_PARAMETERS_INCORRECT);
    
-   for (int i=0;i<smaFilterPeriods;i++) smaFilterPeriod *=2;
+   smaFilterPeriod = 0;
+   if (smaFilterPeriods>0) {
+      MathPow(2,smaFilterPeriods);
+   } 
    
    PrintFormat("initialized with smaFilterPeriod=%i",smaFilterPeriod);
    Comment("%s - SMA: %i",chartLabel,smaFilterPeriod);
@@ -63,26 +69,40 @@ void OnTick()
    double sma = iMA(Symbol(),PERIOD_D1,smaFilterPeriod,0,MODE_SMA,PRICE_CLOSE,0);
    datetime now = TimeCurrent();
    
+   int numberOfPositions = 0;
+   if (direction == 0) numberOfPositions = countOpenShortPositions();
+   if (direction == 1) numberOfPositions = countOpenLongPositions();
 
    if (TimeHour(now)==entryHour &&
       TimeMinute(now)==entryMin &&
-      countOpenShortPositions(myMagic)==0) {
-         bool smaFilter = false;
-         if (counterTrend && Ask > sma) smaFilter = true;
-         if (!counterTrend && Ask < sma) smaFilter = true;
+      numberOfPositions==0) {
+         bool weekDayFilter = true;
          
-         if (smaFilter) {
-            double stop = NormalizeDouble(1.01* Ask,Digits());
-            double tp = NormalizeDouble(0.99 * Bid, Digits());
-            PrintFormat("Ask: %.5f, stop=%.5f, tp=%.5f",Ask,stop);
-            OrderSend(Symbol(),OP_SELL, lots,Bid,5, stop, 0,"intraday seasonal",myMagic,0,clrRed);
+         if (DayOfWeek() == 5 && !holdOverWeekend) weekDayFilter = false;
+         bool smaFilter = (smaFilterPeriods > 0);
+         if (counterTrend && Ask > sma && direction==0) smaFilter = true;
+         if (!counterTrend && Ask < sma && direction==0) smaFilter = true;
+         if (counterTrend && Ask < sma && direction==1) smaFilter = true;
+         if (!counterTrend && Ask > sma && direction==1) smaFilter = true;
+         
+         
+         if (smaFilter && weekDayFilter) {
+            if (direction == 0) {
+               double stop = NormalizeDouble(Ask + (stopPoints * _Point),Digits());
+               double tp = NormalizeDouble(Bid - (targetPoints * _Point), Digits());
+               PrintFormat("Ask: %.5f, stop=%.5f, tp=%.5f",Ask,stop);
+               OrderSend(Symbol(),OP_SELL, lots,Bid,50, stop, tp,"intraday seasonal",myMagic,0,clrRed);
+            } else if (direction == 1) {
+               double stop = NormalizeDouble(Ask - (stopPoints * _Point),Digits());
+               double tp = NormalizeDouble(Bid + (targetPoints * _Point), Digits());
+               PrintFormat("Ask: %.5f, stop=%.5f, tp=%.5f",Ask,stop);
+               OrderSend(Symbol(),OP_BUY, lots,Ask,50, stop, tp,"intraday seasonal",myMagic,0,clrGreen);
+            }
          }
    }
    
-   if (countOpenShortPositions(myMagic)!=0 &&
-      ((TimeHour(now)==exitHour && TimeMinute(now)>=exitMin) || (TimeHour(now)>exitHour))
-   ) {
-      closeAllOpenOrders(myMagic);
+   if (TimeHour(now)==exitHour && TimeMinute(now)>=exitMin) {
+      closeAllOpenOrders();
    }
   }
 //+------------------------------------------------------------------+

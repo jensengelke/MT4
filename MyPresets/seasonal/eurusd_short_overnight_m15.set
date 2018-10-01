@@ -1,0 +1,14 @@
+myMagic=20180608
+tracelevel=0
+direction=0
+lots=0.25
+chartLabel=
+entryHour=23
+entryMin=30
+exitHour=0
+exitMin=0
+smaFilterPeriods=0
+counterTrend=1
+targetPoints=130
+stopPoints=100
+holdOverWeekend=true
