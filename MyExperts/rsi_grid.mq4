@@ -8,7 +8,8 @@
 #property version   "1.00"
 #property strict
 
-#include "../../Include/Arrays/ArrayInt.mqh";
+#include <Arrays/ArrayInt.mqh>
+#include <Arrays/ArrayObj.mqh>
 
 enum ENTRYSIGNAL { ENTRY_LONG, ENTRY_SHORT, ENTRY_NONE };
 
@@ -25,28 +26,45 @@ struct FilterInfo {
 
 };
 
+
+class TicketInfo : public CObject {
+   public:
+      int ticket;
+      double swapConsidered;
+      double commissionConsidered;
+};
+
 input string label0 = "" ; //+--- admin ---+
-input int myMagic = 1;
-input int tracelevel = 2;
+input int    myMagic = 1;
+input int    tracelevel = 2;
 input string chartLabel = "RSI grid";
 
 input string label1 = "" ; //+--- entry signal ---+
-input int rsiPeriod = 6;
-input double rsiLowThreshold = 15;
-input double rsiHighThreshold = 85;
+input int    rsiPeriod = 6;
+input double rsiDistance = 15.0; //RSI threshold in % from upper and lower end
 
 input string label2 = ""; //+--- money management ---+
 input double lots = 0.01;
-input double maxLots = 3.00;
+input double maxLots = 2.00;
 input double tpPoints = 400;
-input double martingaleFactor = 3.0;
+input double martingaleFactor = 2.5;
 input double martingaleMinDistance = 100;
 input double increaseSizeEvery = 1500.0;  //auto-scale (initial account size or 0.0 to disable)
 input double emergencyExitRatio = 0.6; //emergency exit: balance/equity ratio (0.0 to disable)
 input bool   pyramide = true; //new position size in profit
 
+double rsiLowThreshold = rsiDistance;
+double rsiHighThreshold = 100 - rsiDistance;
+
+
 CArrayInt longTickets;
 CArrayInt shortTickets;
+CArrayObj* shortTicketInfos = new CArrayObj();
+CArrayObj* longTicketInfos = new CArrayObj();
+
+int dayOfEvaluatingTicketInfos = -1;
+
+bool aborted = false;
 
 static double currentLots = lots;
 static double currentMaxLots = maxLots;
@@ -60,8 +78,15 @@ int OnInit()
 //---
    Comment(chartLabel);
    
+   if (pyramide && tpPoints < martingaleMinDistance) {        
+      PrintFormat("Cannot increase position size in profit");
+      return (INIT_PARAMETERS_INCORRECT);    
+   }
+   
    longTickets.Clear();
    shortTickets.Clear();
+   longTicketInfos.Clear();
+   shortTicketInfos.Clear();
    for (int i=OrdersTotal(); i>=0; i--) {
       if (OrderSelect(i, SELECT_BY_POS) && OrderMagicNumber() == myMagic) {
          if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
@@ -70,8 +95,21 @@ int OnInit()
          }
          if (OrderType() == OP_BUY) {
             longTickets.Add(OrderTicket());
+            TicketInfo* ti = new TicketInfo();
+            ti.ticket = OrderTicket();
+            ti.commissionConsidered = OrderCommission(); //assume this was processed before
+            ti.swapConsidered = OrderSwap();  //assume this was processed before
+            
+            longTicketInfos.Add(ti);
+            
          } else if ( OrderType() == OP_SELL) {
             shortTickets.Add(OrderTicket());
+            TicketInfo* ti = new TicketInfo();
+            ti.ticket = OrderTicket();
+            ti.commissionConsidered = OrderCommission(); //assume this was processed before
+            ti.swapConsidered = OrderSwap();  //assume this was processed before
+            
+            shortTicketInfos.Add(ti);
          }
       }
    }
@@ -88,6 +126,8 @@ int OnInit()
 void OnDeinit(const int reason)
   {
 //---
+   longTicketInfos = NULL;
+   shortTicketInfos = NULL;
    
   }
 //+------------------------------------------------------------------+
@@ -147,12 +187,21 @@ int sell() {
       size = currentMaxLots - filterInfo.currentSizeOfOpenPositions;
       totalSize = currentMaxLots;
    }
+   
+   if (size == 0) return ticket;
+   
    double totalTarget = (filterInfo.pointsToRecover + tpPoints)* currentLots / totalSize;
    double tp = filterInfo.entry - (totalTarget * _Point);
-     
-   if (size > 0)
-      ticket = OrderSend(Symbol(),OP_SELL,size,filterInfo.entry,1000,0,tp,"rsi-grid",myMagic,0,clrRed);
+      
+   ticket = OrderSend(Symbol(),OP_SELL,size,filterInfo.entry,1000,0,tp,"rsi-grid",myMagic,0,clrRed);      
+   
    if (ticket>0) {
+      //consider new ticket's commission for tp
+      for (int i=shortTickets.Total(); i>=0; i--) {
+         tp += assessTicketInfo(shortTicketInfos, shortTickets.At(i));
+      }  
+      tp += assessTicketInfo(shortTicketInfos, ticket);   
+   
       for (int i=shortTickets.Total(); i>=0; i--) {
          if (OrderSelect(shortTickets.At(i),SELECT_BY_TICKET)) {
             if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
@@ -161,11 +210,21 @@ int sell() {
                PrintFormat("Error: " + error);
                continue;
             }
-            if (ticket>0) {
-               
+         
+            
+            if (tp != OrderTakeProfit()) {
                if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
-                  PrintFormat("ERROR!");
+                  PrintFormat("ERROR 001");
                }
+            }   
+         }
+      }
+      
+      //also update the current ticket
+      if (OrderSelect(ticket,SELECT_BY_TICKET)) {
+         if (NormalizeDouble(tp,_Digits) != NormalizeDouble(OrderTakeProfit(),_Digits)) {
+            if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
+               PrintFormat("ERROR 002, orderTp = %.5f, tp=%.5f", OrderTakeProfit(),tp);
             }
          }
       }
@@ -203,13 +262,21 @@ int buy() {
       size = currentMaxLots - filterInfo.currentSizeOfOpenPositions;
       totalSize = currentMaxLots;
    }
+   
+   if (size == 0.0) return ticket;
+   
    double totalTarget = (filterInfo.pointsToRecover + tpPoints) * currentLots / totalSize;
    double tp = filterInfo.entry + (totalTarget * _Point);
    
-   if (size > 0.0)
-      ticket = OrderSend(Symbol(),OP_BUY,size,filterInfo.entry,1000,0,tp,"rsi-grid",myMagic,0,clrGreen);
+   ticket = OrderSend(Symbol(),OP_BUY,size,filterInfo.entry,1000,0,tp,"rsi-grid",myMagic,0,clrGreen);
    
    if (ticket>0) {
+      //consider new ticket's commission for tp
+      for (int i=shortTickets.Total(); i>=0; i--) {
+         tp += assessTicketInfo(longTicketInfos, longTickets.At(i));
+      }  
+      tp += assessTicketInfo(longTicketInfos, ticket);
+   
       for (int i=longTickets.Total(); i>=0; i--) {
          if (OrderSelect(longTickets.At(i),SELECT_BY_TICKET)) {
             if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
@@ -217,10 +284,18 @@ int buy() {
                PrintFormat("Two Chart Windows run RSI-Grid EA with the same Magic Number!");
                continue;
             }
-            if (ticket>0) {
+            if (OrderTakeProfit() != tp) {
                if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
-                  PrintFormat("ERROR!");
+                  PrintFormat("ERROR 003");
                }
+            }         
+         }
+      }
+      //also update the current ticket
+      if (OrderSelect(ticket,SELECT_BY_TICKET)) {
+         if (NormalizeDouble(tp,_Digits) != NormalizeDouble(OrderTakeProfit(),_Digits)) {
+            if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
+               PrintFormat("ERROR 004, orderTp = %.5f, tp=%.5f", OrderTakeProfit(),tp);
             }
          }
       }
@@ -232,27 +307,40 @@ int buy() {
 }
 
 bool emergencyExit() {
-   if (AccountEquity() / AccountBalance() < emergencyExitRatio) { 
-      Print("Emergency");
-      for (int i=shortTickets.Total(); i>=0; i--) {
-         if (OrderSelect(shortTickets.At(i),SELECT_BY_TICKET)) {
-            OrderClose(OrderTicket(),OrderLots(),Bid,1000,clrRed);
+   if (!aborted) {
+      if (AccountEquity() / AccountBalance() < emergencyExitRatio) { 
+         Print("Emergency");
+         for (int i=shortTickets.Total(); i>=0; i--) {
+            if (OrderSelect(shortTickets.At(i),SELECT_BY_TICKET)) {
+               if (OrderCloseTime()==0) {
+                  if (!OrderClose(OrderTicket(),OrderLots(),Bid,1000,clrRed)) {
+                     PrintFormat("ERROR 005 - cannot close order ?!");
+                  }
+               }
+            }
          }
-      }
-      for (int i=longTickets.Total(); i>=0; i--) {
-         if (OrderSelect(longTickets.At(i),SELECT_BY_TICKET)) {
-            OrderClose(OrderTicket(),OrderLots(),Ask,1000,clrRed);
+         shortTicketInfos.Clear();
+         for (int i=longTickets.Total(); i>=0; i--) {
+            if (OrderSelect(longTickets.At(i),SELECT_BY_TICKET)) {
+               if (OrderCloseTime()==0) {
+                  if (!OrderClose(OrderTicket(),OrderLots(),Ask,1000,clrRed)) {
+                     PrintFormat("ERROR 006 - cannot close order ?!");
+                  }
+               }
+            }
          }
+         longTicketInfos.Clear();
+         aborted = true;
       }
-      return true;
    }
-   return false;
+   return aborted;
 }
 
 void scale() {
    if (tracelevel>=2) PrintFormat("scale() > entry: increaseSizeEvery=%.2f, equity=%.2f",increaseSizeEvery,AccountEquity());
    if (increaseSizeEvery > 0.0) {
-      int factor = (int)AccountEquity() / increaseSizeEvery;
+      int factor = (int)(AccountEquity() / increaseSizeEvery);
+      if (factor<1) factor = 1;
       currentLots = NormalizeDouble(factor * lots,_Digits);
       if (currentLots<lots) currentLots = lots;
       currentMaxLots = NormalizeDouble(factor * maxLots,_Digits);
@@ -302,6 +390,7 @@ FilterInfo assessShort() {
          }
          if (OrderCloseTime()!=0) {
             shortTickets.Delete(i);
+            deleteTicketInfo(shortTicketInfos,OrderTicket());
          } else {
             filterInfo.currentCountOfOpenPositions++;
             filterInfo.currentSizeOfOpenPositions+=OrderLots();
@@ -351,6 +440,7 @@ FilterInfo assessLong() {
          }
          if (OrderCloseTime()!=0) {
             longTickets.Delete(i);
+            deleteTicketInfo(shortTicketInfos,OrderTicket());
          } else {
             filterInfo.currentCountOfOpenPositions++;
             filterInfo.currentSizeOfOpenPositions+=OrderLots();
@@ -372,8 +462,40 @@ FilterInfo assessLong() {
          filterInfo.martingaleDistance = (filterInfo.highestEntry - filterInfo.entry) / _Point; 
       }
    } 
-   PrintFormat("JENS: lowest=%.2f, highest=%.2f, entry=%.2f, dist=%.2f",filterInfo.lowestEntry, filterInfo.highestEntry, filterInfo.entry, filterInfo.martingaleDistance);
    
    if (tracelevel>=2) PrintFormat("assessLong() < exit: dist=%.2f", filterInfo.martingaleDistance);
    return filterInfo;
+}
+
+void deleteTicketInfo(CArrayObj* ticketInfos,int ticket) {
+   if (tracelevel>=2) PrintFormat("deleteTicketInfo() > entry: ticket=%i, ticketInfo.Total()=%i",ticket,ticketInfos.Total());
+   
+   for (int i=ticketInfos.Total();i>=0;i--) {
+      TicketInfo* ti = ticketInfos.At(i);
+      
+      if (NULL != ti && ticket == ti.ticket) {
+         ticketInfos.Delete(i);
+         break; //there can only be one
+      }
+   }
+   if (tracelevel>=2) PrintFormat("deleteTicketInfo() < exit: ticket=%i, ticketInfo.Total()=%i",ticket,ticketInfos.Total());
+}
+
+double assessTicketInfo(CArrayObj* tickets, int ticket){
+   if (tracelevel>=2) PrintFormat("assessTicketInfo() > entry: ticket=%i, ticketInfo.Total()=%i",ticket,tickets.Total());
+   double additionalCost = 0.0; 
+   for (int i=tickets.Total(); i>=0;i--) {
+      TicketInfo* ti = tickets.At(i);
+      if (NULL != ti && ticket == ti.ticket) {
+         if (OrderSelect(ticket,SELECT_BY_TICKET,MODE_TRADES)) {
+            additionalCost += OrderSwap()-ti.swapConsidered;
+            additionalCost += OrderCommission() - ti.commissionConsidered;
+            break;
+         }         
+      }
+   }
+   
+   
+   if (tracelevel>=2) PrintFormat("assessTicketInfo() > entry: ticket=%i, additionalCost=%.2f",ticket,additionalCost);
+   return additionalCost/MarketInfo(Symbol(),MODE_TICKVALUE);
 }
