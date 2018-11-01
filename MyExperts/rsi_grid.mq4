@@ -26,14 +26,6 @@ struct FilterInfo {
 
 };
 
-
-class TicketInfo : public CObject {
-   public:
-      int ticket;
-      double swapConsidered;
-      double commissionConsidered;
-};
-
 input string label0 = "" ; //+--- admin ---+
 input int    myMagic = 1;
 input int    tracelevel = 2;
@@ -52,17 +44,14 @@ input double martingaleMinDistance = 100;
 input double increaseSizeEvery = 1500.0;  //auto-scale (initial account size or 0.0 to disable)
 input double emergencyExitRatio = 0.6; //emergency exit: balance/equity ratio (0.0 to disable)
 input bool   pyramide = true; //new position size in profit
+input bool   abortInEmergency = true;
 
 double rsiLowThreshold = rsiDistance;
 double rsiHighThreshold = 100 - rsiDistance;
 
 
-CArrayInt longTickets;
-CArrayInt shortTickets;
-CArrayObj* shortTicketInfos = new CArrayObj();
-CArrayObj* longTicketInfos = new CArrayObj();
-
-int dayOfEvaluatingTicketInfos = -1;
+static CArrayInt longTickets;
+static CArrayInt shortTickets;
 
 bool aborted = false;
 
@@ -85,8 +74,6 @@ int OnInit()
    
    longTickets.Clear();
    shortTickets.Clear();
-   longTicketInfos.Clear();
-   shortTicketInfos.Clear();
    for (int i=OrdersTotal(); i>=0; i--) {
       if (OrderSelect(i, SELECT_BY_POS) && OrderMagicNumber() == myMagic) {
          if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
@@ -95,27 +82,13 @@ int OnInit()
          }
          if (OrderType() == OP_BUY) {
             longTickets.Add(OrderTicket());
-            TicketInfo* ti = new TicketInfo();
-            ti.ticket = OrderTicket();
-            ti.commissionConsidered = OrderCommission(); //assume this was processed before
-            ti.swapConsidered = OrderSwap();  //assume this was processed before
-            
-            longTicketInfos.Add(ti);
-            
          } else if ( OrderType() == OP_SELL) {
             shortTickets.Add(OrderTicket());
-            TicketInfo* ti = new TicketInfo();
-            ti.ticket = OrderTicket();
-            ti.commissionConsidered = OrderCommission(); //assume this was processed before
-            ti.swapConsidered = OrderSwap();  //assume this was processed before
-            
-            shortTicketInfos.Add(ti);
          }
       }
    }
    
    PrintFormat("Init: Point=%.5f",_Point);
-   
    
 //---
    return(INIT_SUCCEEDED);
@@ -125,10 +98,35 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
   {
-//---
-   longTicketInfos = NULL;
-   shortTicketInfos = NULL;
-   
+  
+      int file = FileOpen("backtest.csv", FILE_WRITE | FILE_CSV, ";"); 
+      for (int i=OrdersHistoryTotal();i>=0;i--) {
+         if (OrderSelect(i,SELECT_BY_POS,MODE_HISTORY)) {
+            string direction = "LONG";
+            if (OrderType()==OP_SELL) direction = "SHORT";
+         
+            FileWrite(file, 
+               OrderTicket(),
+               OrderSymbol(),
+               NormalizeDouble(OrderLots(),2),
+               direction,
+               NormalizeDouble(OrderOpenPrice(),5),
+               TimeToStr(OrderOpenTime(),TIME_DATE | TIME_SECONDS),  
+               NormalizeDouble(OrderClosePrice(),5),
+               TimeToStr(OrderCloseTime(),TIME_DATE | TIME_SECONDS),  
+               NormalizeDouble(OrderCommission(),2),
+               NormalizeDouble(OrderSwap(),2),
+               NormalizeDouble(OrderProfit(),2),
+               NormalizeDouble(OrderStopLoss(),5),
+               NormalizeDouble(OrderTakeProfit(),5),
+               OrderComment()
+             );
+         }
+      }
+      FileFlush(file);
+      FileClose(file);
+      
+      PrintFormat("deinit - file closed.");
   }
 //+------------------------------------------------------------------+
 //| Expert tick function                                             |
@@ -140,7 +138,7 @@ void OnTick()
    
    lastTradeTime = Time[0];
    
-   if (emergencyExit()) return;
+   if (emergencyExit() && abortInEmergency) return;
    scale();
    ENTRYSIGNAL entry = entrySignal();
    
@@ -196,12 +194,7 @@ int sell() {
    ticket = OrderSend(Symbol(),OP_SELL,size,filterInfo.entry,1000,0,tp,"rsi-grid",myMagic,0,clrRed);      
    
    if (ticket>0) {
-      //consider new ticket's commission for tp
-      for (int i=shortTickets.Total(); i>=0; i--) {
-         tp += assessTicketInfo(shortTicketInfos, shortTickets.At(i));
-      }  
-      tp += assessTicketInfo(shortTicketInfos, ticket);   
-   
+     
       for (int i=shortTickets.Total(); i>=0; i--) {
          if (OrderSelect(shortTickets.At(i),SELECT_BY_TICKET)) {
             if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
@@ -210,22 +203,12 @@ int sell() {
                PrintFormat("Error: " + error);
                continue;
             }
-         
             
             if (tp != OrderTakeProfit()) {
                if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
                   PrintFormat("ERROR 001");
                }
             }   
-         }
-      }
-      
-      //also update the current ticket
-      if (OrderSelect(ticket,SELECT_BY_TICKET)) {
-         if (NormalizeDouble(tp,_Digits) != NormalizeDouble(OrderTakeProfit(),_Digits)) {
-            if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
-               PrintFormat("ERROR 002, orderTp = %.5f, tp=%.5f", OrderTakeProfit(),tp);
-            }
          }
       }
    }
@@ -271,35 +254,24 @@ int buy() {
    ticket = OrderSend(Symbol(),OP_BUY,size,filterInfo.entry,1000,0,tp,"rsi-grid",myMagic,0,clrGreen);
    
    if (ticket>0) {
-      //consider new ticket's commission for tp
-      for (int i=shortTickets.Total(); i>=0; i--) {
-         tp += assessTicketInfo(longTicketInfos, longTickets.At(i));
-      }  
-      tp += assessTicketInfo(longTicketInfos, ticket);
-   
+     
       for (int i=longTickets.Total(); i>=0; i--) {
          if (OrderSelect(longTickets.At(i),SELECT_BY_TICKET)) {
             if (StringCompare(OrderSymbol(), Symbol(),false)!=0) {
-               Comment("Two Chart Windows run RSI-Grid EA with the same Magic Number!");
-               PrintFormat("Two Chart Windows run RSI-Grid EA with the same Magic Number!");
+               string error = StringFormat("OrderSymbol=%s, Symbol=%",OrderSymbol(),Symbol());
+               Comment("Error: " + error);
+               PrintFormat("Error: " + error);
                continue;
             }
-            if (OrderTakeProfit() != tp) {
+            
+            if (tp != OrderTakeProfit()) {
                if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
-                  PrintFormat("ERROR 003");
+                  PrintFormat("ERROR 001");
                }
-            }         
+            }   
          }
       }
-      //also update the current ticket
-      if (OrderSelect(ticket,SELECT_BY_TICKET)) {
-         if (NormalizeDouble(tp,_Digits) != NormalizeDouble(OrderTakeProfit(),_Digits)) {
-            if (!OrderModify(OrderTicket(),0,0,tp,0,clrGreen)) {
-               PrintFormat("ERROR 004, orderTp = %.5f, tp=%.5f", OrderTakeProfit(),tp);
-            }
-         }
-      }
-   } 
+   }
    
    if (tracelevel>=2) PrintFormat("buy() < exit %i", ticket);   
    
@@ -319,7 +291,7 @@ bool emergencyExit() {
                }
             }
          }
-         shortTicketInfos.Clear();
+         
          for (int i=longTickets.Total(); i>=0; i--) {
             if (OrderSelect(longTickets.At(i),SELECT_BY_TICKET)) {
                if (OrderCloseTime()==0) {
@@ -329,7 +301,6 @@ bool emergencyExit() {
                }
             }
          }
-         longTicketInfos.Clear();
          aborted = true;
       }
    }
@@ -390,7 +361,6 @@ FilterInfo assessShort() {
          }
          if (OrderCloseTime()!=0) {
             shortTickets.Delete(i);
-            deleteTicketInfo(shortTicketInfos,OrderTicket());
          } else {
             filterInfo.currentCountOfOpenPositions++;
             filterInfo.currentSizeOfOpenPositions+=OrderLots();
@@ -405,12 +375,15 @@ FilterInfo assessShort() {
       }
    }
    
-   if (filterInfo.highestEntry > 0.0) {
-      filterInfo.martingaleDistance = (filterInfo.entry - filterInfo.highestEntry) / _Point;
-      if (filterInfo.entry < filterInfo.lowestEntry) {
-         filterInfo.martingaleDistance = (filterInfo.entry - filterInfo.lowestEntry) / _Point; 
-      }
-   } 
+   if (filterInfo.highestEntry > 0.0 && filterInfo.highestEntry < filterInfo.entry) {
+      filterInfo.martingaleDistance = (filterInfo.entry - filterInfo.highestEntry) / _Point; 
+   }
+   if (filterInfo.lowestEntry > 0.0 && filterInfo.lowestEntry > filterInfo.entry) {
+      filterInfo.martingaleDistance = (filterInfo.entry - filterInfo.lowestEntry) / _Point;
+   }
+   
+   if (tracelevel>=2) PrintFormat("assessLong() lowest=%.5f,highest=%.5f,entry=%.5f,dist=%.5f", filterInfo.lowestEntry, filterInfo.highestEntry, filterInfo.entry, filterInfo.martingaleDistance);
+    
    
    if (tracelevel>=2) PrintFormat("assessShort() < exit: count=%i", filterInfo.currentCountOfOpenPositions);
    return filterInfo;
@@ -440,7 +413,6 @@ FilterInfo assessLong() {
          }
          if (OrderCloseTime()!=0) {
             longTickets.Delete(i);
-            deleteTicketInfo(shortTicketInfos,OrderTicket());
          } else {
             filterInfo.currentCountOfOpenPositions++;
             filterInfo.currentSizeOfOpenPositions+=OrderLots();
@@ -456,46 +428,15 @@ FilterInfo assessLong() {
       }
    }    
    
-   if (filterInfo.lowestEntry > 0.0) {
+   if (filterInfo.lowestEntry > 0.0 && filterInfo.lowestEntry > filterInfo.entry) {
       filterInfo.martingaleDistance = (filterInfo.lowestEntry - filterInfo.entry) / _Point;
-      if (filterInfo.entry > filterInfo.highestEntry) {
-         filterInfo.martingaleDistance = (filterInfo.highestEntry - filterInfo.entry) / _Point; 
-      }
-   } 
+   }
+   if (filterInfo.highestEntry > 0.0 && filterInfo.highestEntry < filterInfo.entry) {
+      filterInfo.martingaleDistance = (filterInfo.highestEntry - filterInfo.entry) / _Point; 
+   }
+   if (tracelevel>=2) PrintFormat("assessLong() lowest=%.5f,highest=%.5f,entry=%.5f,dist=%.5f", filterInfo.lowestEntry, filterInfo.highestEntry, filterInfo.entry, filterInfo.martingaleDistance);
+   
    
    if (tracelevel>=2) PrintFormat("assessLong() < exit: dist=%.2f", filterInfo.martingaleDistance);
    return filterInfo;
-}
-
-void deleteTicketInfo(CArrayObj* ticketInfos,int ticket) {
-   if (tracelevel>=2) PrintFormat("deleteTicketInfo() > entry: ticket=%i, ticketInfo.Total()=%i",ticket,ticketInfos.Total());
-   
-   for (int i=ticketInfos.Total();i>=0;i--) {
-      TicketInfo* ti = ticketInfos.At(i);
-      
-      if (NULL != ti && ticket == ti.ticket) {
-         ticketInfos.Delete(i);
-         break; //there can only be one
-      }
-   }
-   if (tracelevel>=2) PrintFormat("deleteTicketInfo() < exit: ticket=%i, ticketInfo.Total()=%i",ticket,ticketInfos.Total());
-}
-
-double assessTicketInfo(CArrayObj* tickets, int ticket){
-   if (tracelevel>=2) PrintFormat("assessTicketInfo() > entry: ticket=%i, ticketInfo.Total()=%i",ticket,tickets.Total());
-   double additionalCost = 0.0; 
-   for (int i=tickets.Total(); i>=0;i--) {
-      TicketInfo* ti = tickets.At(i);
-      if (NULL != ti && ticket == ti.ticket) {
-         if (OrderSelect(ticket,SELECT_BY_TICKET,MODE_TRADES)) {
-            additionalCost += OrderSwap()-ti.swapConsidered;
-            additionalCost += OrderCommission() - ti.commissionConsidered;
-            break;
-         }         
-      }
-   }
-   
-   
-   if (tracelevel>=2) PrintFormat("assessTicketInfo() > entry: ticket=%i, additionalCost=%.2f",ticket,additionalCost);
-   return additionalCost/MarketInfo(Symbol(),MODE_TICKVALUE);
 }
