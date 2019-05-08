@@ -17,7 +17,6 @@ input string chartLabel = "trendfollower";
 input string label1 = "" ; //+--- entry signal ---+
 input int quickEmaPeriod = 20;
 input int slowSmoothedMaPeriod = 50;
-input int minDistancePoints = 100;
 
 input string label2 = ""; //+--- money management ---+
 input double lots = 0.1;

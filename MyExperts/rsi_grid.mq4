@@ -68,8 +68,8 @@ double rsiHighThreshold = 100 - rsiDistance;
 
 static CArrayInt longTickets;
 static CArrayInt shortTickets;
-static CArrayObj *costsLong = new CArrayObj();
-static CArrayObj *costsShort = new CArrayObj();
+static CArrayObj *costsLong; 
+static CArrayObj *costsShort;
 
 bool aborted = false;
 
@@ -91,7 +91,9 @@ int OnInit()
    
    longTickets.Clear();
    shortTickets.Clear();
+   costsLong = new CArrayObj();
    costsLong.Clear();
+   costsShort = new CArrayObj();
    costsShort.Clear();
    
    
@@ -491,7 +493,8 @@ void considerCosts() {
          }
          
          shortLots += OrderLots();
-         openShortCost += OrderSwap() + OrderCommission(); 
+         openShortCost += OrderCommission(); 
+         openShortCost += (-1 * OrderSwap()); //negative OrderSwap() is cost
       }
    }
    
@@ -507,7 +510,7 @@ void considerCosts() {
          if (c.GetCommission() != OrderCommission() && tracelevel>=2) {
             PrintFormat("I0007 OrderCommission not considered: %.2f (ticket: %i)",OrderCommission(),OrderTicket());
          }
-         if (c.GetSwap() != OrderSwap() && tracelevel>=2) {
+         if (c.GetSwap() != (-1*OrderSwap()) && tracelevel>=2) {
             PrintFormat("I0008 Swap not considered: %.2f (ticket: %i)",OrderSwap(),OrderTicket());
          }
          consideredCostShort += c.GetCommission() + c.GetSwap();
@@ -516,7 +519,7 @@ void considerCosts() {
       }
    }
    
-   if (tracelevel>=2) PrintFormat("I0009 short considered cost: %.2f, actual cost: %.2f",consideredCostShort, openShortCost);
+   if (tracelevel>=0) PrintFormat("I0009 short considered cost: %.2f, actual cost: %.2f",consideredCostShort, openShortCost);
    double toBeConsidered = consideredCostShort - openShortCost;
    
    if (toBeConsidered != 0) {
@@ -533,11 +536,11 @@ void considerCosts() {
                   continue;
                }
                
-               
+               double oldTP = OrderTakeProfit();
                if (!OrderModify(OrderTicket(),0,OrderStopLoss(),OrderTakeProfit()-points,0,clrGreen)) {
                   PrintFormat("E0012");
                } else {
-                  PrintFormat("I0011 Short OrderModified to consider costs. Ticket: %i",OrderTicket());
+                  PrintFormat("I0011 Short OrderModified to consider costs. Ticket: %i, old tp=%.5f, new tp=%.5f",OrderTicket(), oldTP,OrderTakeProfit());
                }
                
             }
@@ -546,7 +549,7 @@ void considerCosts() {
          for (int i=costsShort.Total()-1;i>=0;i--) {
             CCost *c = costsShort.At(i);
             if (OrderSelect(c.GetTicket(),SELECT_BY_TICKET)) {
-               c.SetSwap(OrderSwap());
+               c.SetSwap(-1 * OrderSwap());
                c.SetCommission(OrderCommission());
                if (tracelevel>=2) PrintFormat("I0012 short cost tracking updated for ticket %i with swap %.2f and commission %.2f", c.GetTicket(),c.GetSwap(),c.GetCommission());
             }
@@ -569,7 +572,8 @@ void considerCosts() {
          }
          
          longLots += OrderLots();
-         openLongCost += OrderSwap() + OrderCommission(); 
+         openLongCost += OrderCommission(); 
+         openLongCost += (-1 * OrderSwap()); //negative OrderSwap() is cost
       }
    }
    
@@ -586,7 +590,7 @@ void considerCosts() {
          if (c.GetCommission() != OrderCommission() && tracelevel>=2) {
             PrintFormat("I0013 OrderCommission not considered: %.2f (ticket: %i)",OrderCommission(),OrderTicket());
          }
-         if (c.GetSwap() != OrderSwap() && tracelevel>=2) {
+         if (c.GetSwap() != (-1 * OrderSwap()) && tracelevel>=2) {
             PrintFormat("I0014 Swap not considered: %.2f (ticket: %i)",OrderSwap(),OrderTicket());
          }
          consideredCostLong += c.GetCommission() + c.GetSwap();
@@ -595,7 +599,7 @@ void considerCosts() {
       }
    }
    
-   if (tracelevel>=2) PrintFormat("I0015 long considered cost: %.2f, actual cost: %.2f",consideredCostLong, openLongCost);
+   if (tracelevel>=0) PrintFormat("I0015 long considered cost: %.2f, actual cost: %.2f",consideredCostLong, openLongCost);
    toBeConsidered = consideredCostLong - openLongCost;
    
    if (toBeConsidered != 0) {
@@ -611,11 +615,11 @@ void considerCosts() {
                   continue;
                }
                
-               
+               double oldTP = OrderTakeProfit();
                if (!OrderModify(OrderTicket(),0,OrderStopLoss(),OrderTakeProfit()+points,0,clrGreen)) {
                   PrintFormat("E0015");
                } else {
-                  if (tracelevel>=2) PrintFormat("I0017 Long OrderModified to consider costs, ticket: %i", OrderTicket());
+                  PrintFormat("I0017 Long OrderModified to consider costs, ticket: %i, old tp=%.5f, new tp=%.5f", OrderTicket(), oldTP, OrderTakeProfit());
                }
                
             }
@@ -624,7 +628,7 @@ void considerCosts() {
          for (int i=costsLong.Total()-1;i>=0;i--) {
             CCost *c = costsLong.At(i);
             if (OrderSelect(c.GetTicket(),SELECT_BY_TICKET)) {
-               c.SetSwap(OrderSwap());
+               c.SetSwap(-1 * OrderSwap());
                c.SetCommission(OrderCommission());
                if (tracelevel>=2) PrintFormat("I0018 long cost tracking updated for ticket %i with swap %.2f and commission %.2f", c.GetTicket(),c.GetSwap(),c.GetCommission());
             }
@@ -644,6 +648,10 @@ CCost::CCost(void) {
 CCost::CCost(int ticket, double commission, double swap){
    m_ticket = ticket;
    m_commission = commission;
-   m_swap = swap;
+   if (swap < 0.0) {
+      m_swap = (-1 * swap);
+   } else {
+      m_swap = 0.0;
+   }
 }
 
