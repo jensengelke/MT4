@@ -19,7 +19,7 @@ input int    rsiPeriod = 8;
 input double rsiDistance = 20.0; //RSI threshold in % from upper and lower end
 
 input string label2 = ""; //+--- money management ---+
-input double riskInPercent = 3.0;
+input double riskInPercentOfEquity = 3.0;
 //input int    maxPositions = 3; //max number of positions
 input double tpPoints = 400;
 input double trailingStopPoints = 20.0;
@@ -34,6 +34,7 @@ static int pendingShortTicket = -1;
 static int longTicket = -1;
 static int shortTicket = -1;
 static datetime lastTradeTime = NULL;
+double lotDigits = 0;
 
 
 
@@ -52,6 +53,10 @@ int OnInit()
          if (OrderType() == OP_SELL) shortTicket = OrderTicket();
       }      
    }
+   double lotStep = MarketInfo(_Symbol,MODE_LOTSTEP);
+   PrintFormat("I0001: lotstep = %.5f", lotStep);
+   lotDigits = MathLog(1/lotStep)/MathLog(10);
+   PrintFormat("I0002: lotDigits = %f %d %i", lotDigits, lotDigits, lotDigits);
 //---
    return(INIT_SUCCEEDED);
   }
@@ -99,7 +104,7 @@ void OnTick()
    if (Time[0] == lastTradeTime) return;   
    lastTradeTime = Time[0];   
    
-   if (backtest) Comment("RSI extreme: RSI=", rsiDistance, ", risk: ", riskInPercent);
+   if (backtest) Comment("RSI extreme: RSI=", rsiDistance, ", risk: ", riskInPercentOfEquity);
    
    double rsi = iRSI(Symbol(),PERIOD_CURRENT,rsiPeriod,PRICE_CLOSE,1);
    
@@ -143,12 +148,21 @@ void OnTick()
 //+------------------------------------------------------------------+
 
 double lotsByRisk(double stopDistance) {
+   if (tracelevel>=2) PrintFormat("ENTRY lotsByRisk [stopDistance: %.5f, riskInPercentOfEquity: %.2f", stopDistance, riskInPercentOfEquity);
    if (0==stopDistance) return 0.0;
    //PrintFormat("passed symbol_digits=%i, mode_points says: %i",lotDigits, MarketInfo(Symbol(),MODE_DIGITS));
-   double equityAtRisk = (riskInPercent/100) * AccountEquity();
+   double equityAtRisk = (riskInPercentOfEquity/100) * AccountEquity();
    //PrintFormat("equity to risk: %.2f with stopDistance=%.2f",equityAtRisk,stopDistance);
    double lots = equityAtRisk / (stopDistance * MarketInfo(Symbol(),MODE_LOTSIZE));
-   lots = NormalizeDouble(lots,1); //TODO
+   if (tracelevel>=2) PrintFormat("lots by risk: %.2f, lotsize: %.2f", lots, MarketInfo(Symbol(),MODE_LOTSIZE));
+   double marginPerLot = 600.0; // MarketInfo(_Symbol,MODE_MARGININIT);
+   double freeMargin = AccountFreeMargin();
+   
+   if ( (freeMargin/lots) < marginPerLot) lots = freeMargin/marginPerLot;
+   
+   if (tracelevel >= 2) PrintFormat("freeMargin: %.2f, marinPerLot: %.2f",freeMargin,marginPerLot);
+   
+   lots = NormalizeDouble(lots,lotDigits);
    
    if (lots > MarketInfo(Symbol(),MODE_MAXLOT)) {
       lots = MarketInfo(Symbol(),MODE_MAXLOT);
@@ -157,10 +171,13 @@ double lotsByRisk(double stopDistance) {
       PrintFormat("increasing risk to meet min lot size: %.2f (was %.2f)", MarketInfo(Symbol(),MODE_MINLOT), lots);
       lots = MarketInfo(Symbol(),MODE_MINLOT);
    }
-   if (tracelevel>=2) PrintFormat("money to risk: %.2f,stopDistance:%.5f, lotsize: %.2f, lots=%.5f, lotstep %.5f",equityAtRisk,stopDistance,MarketInfo(Symbol(),MODE_LOTSIZE),lots, MarketInfo(Symbol(),MODE_LOTSTEP));
+   
+   
+   if (tracelevel >= 1) PrintFormat("money to risk: %.2f,stopDistance:%.2f, lotsize: %.2f, lots=%.2f",equityAtRisk,stopDistance,MarketInfo(Symbol(),MODE_LOTSIZE),lots);
    
    return lots;   
 }
+
 
 void trail() {
    if (trailingStopPoints == 0) return;
